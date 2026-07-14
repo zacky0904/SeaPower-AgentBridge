@@ -33,23 +33,33 @@ $game = Locate-Game
 if (-not $game) { Bad "找不到 Sea Power。請把本工具放在 <Sea Power>\sp-advisor\ 底下，或先在 Steam 安裝遊戲。"; Read-Host "`n按 Enter 結束"; exit 1 }
 OK "Sea Power: $game"
 
-# ── 通用：檢查指令，缺的話用 winget 裝 ──────────────────
-function Ensure-Tool($name, $exe, $wingetId, $url) {
-  if (Get-Command $exe -EA SilentlyContinue) { OK "$name 已安裝"; return $true }
+# 安裝後把 registry 的 PATH 讀回目前視窗，讓新裝的工具立刻可用（免重開視窗）
+function Refresh-Path {
+  $m = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+  $u = [System.Environment]::GetEnvironmentVariable("Path","User")
+  $env:Path = @($m,$u | Where-Object { $_ }) -join ";"
+}
+# .NET SDK：光有 dotnet host 不夠（可能只裝了 runtime），要真的裝了 SDK 才能 build
+function Test-DotnetSdk {
+  if (-not (Get-Command dotnet -EA SilentlyContinue)) { return $false }
+  try { $s = & dotnet --list-sdks 2>$null; return ($LASTEXITCODE -eq 0 -and @($s).Count -ge 1) } catch { return $false }
+}
+# ── 通用：用 check scriptblock 判斷；缺的話 winget 裝、裝完刷新 PATH 再判斷一次 ──
+function Ensure-Tool($name, $check, $wingetId, $url) {
+  if (& $check) { OK "$name 已安裝"; return $true }
   Warn "$name 未安裝，嘗試用 winget 自動安裝…"
-  if (Get-Command winget -EA SilentlyContinue) {
-    winget install --id $wingetId -e --accept-source-agreements --accept-package-agreements
-    if (Get-Command $exe -EA SilentlyContinue) { OK "$name 已安裝"; return $true }
-    Warn "$name 裝好了，但 PATH 尚未更新到目前視窗。安裝完請**重開這個視窗、再跑一次本工具**。"; return $false
-  }
-  Bad "找不到 winget，請手動安裝 $name：$url"; return $false
+  if (-not (Get-Command winget -EA SilentlyContinue)) { Bad "找不到 winget，請手動安裝 $name：$url"; return $false }
+  winget install --id $wingetId -e --accept-source-agreements --accept-package-agreements
+  Refresh-Path
+  if (& $check) { OK "$name 已安裝"; return $true }
+  Warn "$name 裝好了，但目前視窗仍抓不到。請**重開視窗、再跑一次本工具**。"; return $false
 }
 
 # ── 2. Node.js（跑網頁伺服器用）────────────────────────
-if (-not (Ensure-Tool "Node.js" "node" "OpenJS.NodeJS.LTS" "https://nodejs.org/")) { $problems++ }
+if (-not (Ensure-Tool "Node.js" { [bool](Get-Command node -EA SilentlyContinue) } "OpenJS.NodeJS.LTS" "https://nodejs.org/")) { $problems++ }
 
 # ── 3. .NET SDK（編譯 plugin 用）───────────────────────
-$hasDotnet = Ensure-Tool ".NET SDK" "dotnet" "Microsoft.DotNet.SDK.8" "https://dotnet.microsoft.com/download"
+$hasDotnet = Ensure-Tool ".NET SDK" { Test-DotnetSdk } "Microsoft.DotNet.SDK.8" "https://dotnet.microsoft.com/download"
 if (-not $hasDotnet) { $problems++ }
 
 # ── 4. BepInEx（遊戲載入 plugin 用）────────────────────
@@ -75,6 +85,7 @@ $pluginDst = Join-Path $game "BepInEx\plugins\SpAdvisorBridge.dll"
 $bepReady  = Test-Path (Join-Path $game "BepInEx\core\BepInEx.dll")
 if ($hasDotnet -and $bepReady) {
   Info "編譯 plugin…"
+  $env:SeaPowerDir = $game   # 讓 csproj 不管專案放哪都找得到遊戲 DLL
   Push-Location (Join-Path $here "plugin")
   $buildOut = dotnet build -c Release -v quiet -nologo 2>&1
   $code = $LASTEXITCODE
