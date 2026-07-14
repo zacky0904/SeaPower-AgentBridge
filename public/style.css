@@ -1,0 +1,176 @@
+/* SP Advisor — 戰術顯示風格，配色比照遊戲 Settings_UI_Tactical.ini */
+:root {
+  --bg: #0a0e12;
+  --panel: #11171d;
+  --panel-2: #0d1319;
+  --border: #24303a;
+  --ink: #c7d2da;
+  --ink-dim: #7d8b96;
+  --accent: #35a0c8;
+
+  /* 遊戲日間戰術色 (ARGB → RGB) */
+  --c-friendly: rgb(0,0,255);
+  --c-allied:   rgb(179,89,0);
+  --c-hostile:  rgb(255,0,0);
+  --c-neutral:  rgb(0,153,0);
+  --c-unknown:  rgb(102,102,0);
+  --c-destroyed:rgb(0,0,0);
+
+  --sea-shallow: #0f2233;
+  --sea-deep:    #071018;
+  --land:        #1c2a1c;
+  --land-shore:  #33502f;
+  --grid:        rgba(90,120,140,0.28);
+  --grid-strong: rgba(120,160,185,0.45);
+  --font-mono: "Consolas","Cascadia Mono",ui-monospace,monospace;
+}
+/* 夜間配色（遊戲 Night* 色） */
+body.night {
+  --c-friendly: rgb(107,207,255);
+  --c-allied:   rgb(245,170,66);
+  --c-hostile:  rgb(245,131,130);
+  --c-neutral:  rgb(158,254,128);
+  --c-unknown:  rgb(255,197,140);
+  --sea-shallow: #12181c;
+  --sea-deep:    #070b0e;
+  --land:        #14180f;
+}
+
+* { box-sizing: border-box; }
+html,body { height:100%; margin:0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: "Segoe UI", system-ui, "Microsoft JhengHei", sans-serif;
+  font-size: 13px; overflow: hidden;
+}
+.mono { font-family: var(--font-mono); }
+
+#app { display:flex; flex-direction:column; height:100vh; }
+
+/* 頂欄 */
+#topbar {
+  display:flex; align-items:center; gap:14px;
+  height:38px; padding:0 12px;
+  background: linear-gradient(#141c23,#0e141a);
+  border-bottom:1px solid var(--border);
+}
+#topbar .brand { font-weight:700; letter-spacing:2px; color:var(--accent); }
+#mission-name { color:var(--ink-dim); }
+#topbar .spacer { flex:1; }
+#clock { color:var(--ink); font-size:14px; }
+.chip {
+  background:var(--panel); color:var(--ink); border:1px solid var(--border);
+  border-radius:4px; padding:3px 8px; cursor:pointer; font-size:12px;
+}
+.chip:hover { border-color:var(--accent); }
+
+/* 主區 */
+#main { flex:1; display:grid; grid-template-columns: 220px 1fr 340px; min-height:0; }
+aside { background:var(--panel); display:flex; flex-direction:column; min-height:0; }
+#left { border-right:1px solid var(--border); }
+#right { border-left:1px solid var(--border); }
+.panel-title {
+  padding:8px 12px; font-size:11px; letter-spacing:1px; text-transform:uppercase;
+  color:var(--ink-dim); border-bottom:1px solid var(--border); background:var(--panel-2);
+}
+
+/* 單位清單 */
+#unit-list { list-style:none; margin:0; padding:6px; overflow:auto; }
+#unit-list li {
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:4px;
+  cursor:pointer; border:1px solid transparent;
+}
+#unit-list li:hover { background:var(--panel-2); }
+#unit-list li.sel { border-color:var(--accent); background:#0e1a22; }
+#unit-list .dot { width:10px; height:10px; border-radius:2px; flex:none; }
+#unit-list .u-name { flex:1; font-family:var(--font-mono); font-size:12px; }
+#unit-list .u-sub { color:var(--ink-dim); font-size:11px; }
+#unit-list .u-folder {
+  gap:6px; padding:5px 8px; margin-top:2px; background:var(--panel-2);
+  color:var(--ink-dim); font-size:11px; letter-spacing:1px; text-transform:uppercase;
+}
+#unit-list .u-folder:hover { color:var(--ink); background:var(--panel-2); }
+.u-caret { width:12px; flex:none; color:var(--accent); font-size:10px; }
+.u-fold-name { flex:1; }
+.u-fold-count { color:var(--ink-dim); background:var(--bg); border-radius:8px; padding:0 7px; font-size:10px; }
+#unit-list .u-item { padding-left:12px; }
+
+/* 海圖 */
+#chart-wrap { position:relative; min-width:0; background:var(--sea-deep); }
+#map { position:absolute; inset:0; z-index:0; background:#aacbe0; }
+#chart { position:absolute; inset:0; z-index:450; pointer-events:none; }
+#waiting {
+  position:absolute; inset:0; z-index:460; display:flex; align-items:center; justify-content:center;
+  color:var(--ink-dim); font-size:15px; letter-spacing:1px; pointer-events:none;
+  background:rgba(6,12,16,0.35); text-shadow:0 1px 3px #000;
+}
+#waiting.hidden { display:none; }
+/* Leaflet 深色微調 */
+.leaflet-container { background:var(--sea-deep); font-family:var(--font-mono); }
+.leaflet-control-attribution { background:rgba(6,12,16,.7)!important; color:var(--ink-dim)!important; }
+.leaflet-control-attribution a { color:var(--accent)!important; }
+.leaflet-bar a { background:var(--panel)!important; color:var(--ink)!important; border-color:var(--border)!important; }
+#readout {
+  position:absolute; left:10px; top:8px; padding:8px 11px;
+  background:rgba(10,16,22,0.92); border:1px solid var(--border); border-radius:6px;
+  color:var(--ink); max-width:min(320px,42%); max-height:80%; overflow:auto;
+  box-shadow:0 4px 16px rgba(0,0,0,0.45);
+}
+#readout.hidden { display:none; }
+.ro-head { margin-bottom:4px; }
+.ro-num { font-family:var(--font-mono); font-weight:700; font-size:15px; }
+.ro-nm { font-weight:700; font-size:15px; margin-left:5px; }
+.ro-sub { color:var(--ink-dim); font-size:11px; margin-top:1px; }
+.ro-row { display:flex; gap:8px; line-height:1.55; font-size:12px; }
+.ro-k { color:var(--ink-dim); width:60px; flex:none; font-size:11px; }
+.ro-v { color:var(--ink); flex:1; font-family:var(--font-mono); word-break:break-word; }
+.ro-sec { color:var(--accent); font-size:10px; letter-spacing:1.5px; margin:7px 0 2px;
+          border-top:1px solid var(--border); padding-top:4px; }
+.ro-warn { color:var(--c-hostile); font-weight:700; }
+.ro-ammo { display:flex; flex-direction:column; gap:1px; }
+.ro-am { display:flex; justify-content:space-between; gap:12px; font-size:12px; font-family:var(--font-mono); }
+.ro-amn { color:var(--ink); }
+.ro-amc { color:var(--ink-dim); white-space:nowrap; }
+#chart-hint {
+  position:absolute; right:10px; bottom:8px; color:var(--ink-dim); font-size:11px;
+  background:rgba(6,12,16,0.6); padding:3px 7px; border-radius:4px; pointer-events:none;
+}
+#plan-toolbar {
+  position:absolute; left:50%; bottom:14px; transform:translateX(-50%); z-index:500;
+  display:flex; align-items:center; gap:8px; padding:6px 10px;
+  background:rgba(10,16,22,0.94); border:1px solid var(--border); border-radius:8px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.45); font-family:var(--font-mono); font-size:12px; color:var(--ink);
+}
+#plan-toolbar.hidden { display:none; }
+#plan-toolbar .pt-hint { color:var(--ink-dim); }
+#plan-toolbar button {
+  background:var(--accent); color:#04121a; border:none; border-radius:5px;
+  padding:4px 10px; font-weight:700; cursor:pointer; font-family:inherit;
+}
+#plan-toolbar button.pt-ghost { background:var(--panel); color:var(--ink); border:1px solid var(--border); }
+#plan-toolbar button:hover { filter:brightness(1.1); }
+
+/* 聊天 */
+#chat-log { flex:1; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:8px; }
+.msg { max-width:92%; padding:7px 10px; border-radius:8px; line-height:1.5; white-space:pre-wrap; }
+.msg.user { align-self:flex-end; background:#12303f; border:1px solid #1d4257; }
+.msg.bot  { align-self:flex-start; background:var(--panel-2); border:1px solid var(--border); }
+.msg.sys  { align-self:center; color:var(--ink-dim); font-size:11px; background:none; }
+#chat-form { display:flex; gap:6px; padding:8px; border-top:1px solid var(--border); background:var(--panel-2); }
+#chat-input {
+  flex:1; resize:none; background:var(--bg); color:var(--ink);
+  border:1px solid var(--border); border-radius:5px; padding:6px 8px; font-family:inherit;
+}
+#chat-input:focus { outline:none; border-color:var(--accent); }
+#chat-form button {
+  background:var(--accent); color:#04121a; border:none; border-radius:5px;
+  padding:0 14px; font-weight:700; cursor:pointer;
+}
+#chat-form button:hover { filter:brightness(1.1); }
+
+/* 訊息日誌 */
+#msglog {
+  height:74px; overflow:auto; padding:6px 12px; font-size:12px;
+  background:var(--panel-2); border-top:1px solid var(--border); color:var(--ink-dim);
+}
+#msglog .t { color:var(--accent); }

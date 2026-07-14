@@ -1,0 +1,14 @@
+# 編譯產物
+plugin/bin/
+plugin/obj/
+
+# 停用/殘留的 DLL
+*.disabled
+
+# 大型 / 可重新產生的地圖來源（land-simplified.geojson 是執行時真正用到的，保留）
+public/vendor/land-10m.geojson
+public/vendor/land-50m.geojson
+
+# 系統
+Thumbs.db
+.DS_Store

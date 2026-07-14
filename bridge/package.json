@@ -1,0 +1,9 @@
+{
+  "name": "@sp-advisor/bridge",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "description": "SP Advisor 橋接探針：讀取戰況並輸出到 console（第二階段驗證用）",
+  "dependencies": {
+    "@seapower/spruntime": "*"
+  }
+}

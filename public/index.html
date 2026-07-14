@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SP Advisor — 戰術海圖</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 頂欄 -->
+    <header id="topbar">
+      <div class="brand">SP&nbsp;ADVISOR</div>
+      <div id="mission-name">—</div>
+      <div class="spacer"></div>
+      <button id="day-night" class="chip" title="日/夜配色">☾ 夜間</button>
+      <div id="clock" class="mono">T + 00:00:00</div>
+    </header>
+
+    <div id="main">
+      <!-- 左：單位/編隊清單 -->
+      <aside id="left">
+        <div class="panel-title">單位 / 編隊</div>
+        <ul id="unit-list"></ul>
+      </aside>
+
+      <!-- 中：海圖 -->
+      <section id="chart-wrap">
+        <div id="map"></div>
+        <canvas id="chart"></canvas>
+        <div id="waiting" class="mono">等待遊戲連線…</div>
+        <div id="plan-toolbar" class="hidden"></div>
+        <div id="readout" class="mono"></div>
+        <div id="chart-hint" class="mono">拖曳平移 · 滾輪縮放 · 點選接觸 · 雙擊/F 置中</div>
+      </section>
+
+      <!-- 右：聊天 -->
+      <aside id="right">
+        <div class="panel-title">戰術顧問</div>
+        <div id="chat-log"></div>
+        <form id="chat-form">
+          <textarea id="chat-input" rows="2" placeholder="跟顧問討論戰況…（Enter 送出 / Shift+Enter 換行）"></textarea>
+          <button type="submit">送出</button>
+        </form>
+      </aside>
+    </div>
+
+    <!-- 底：訊息日誌 -->
+    <footer id="msglog" class="mono"></footer>
+  </div>
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
