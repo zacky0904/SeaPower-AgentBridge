@@ -31,10 +31,11 @@
 
 ## 安裝 / 使用
 
-1. 安裝 BepInEx 到遊戲根目錄，先執行一次遊戲產生 `BepInEx/` 資料夾。
-2. 編譯 plugin：`cd plugin && dotnet build -c Release`（或跑 `plugin/build.cmd`），把 `SpAdvisorBridge.dll` 放進 `BepInEx/plugins/`。
-3. 啟動網頁伺服器：雙擊 `啟動 SP Advisor.cmd`（或 `node server.mjs`）→ 瀏覽器開 `http://localhost:8765`。
-4. 開遊戲進任務，海圖就會顯示即時戰況。
+1. 把本專案放到遊戲目錄下（即 `<Sea Power>/sp-advisor/`）。plugin 的 `.csproj` 以相對路徑自動找到遊戲 DLL，不管 Steam 裝在哪台哪個磁碟都行。若想放別處，設環境變數 `SeaPowerDir` 指向遊戲安裝資料夾即可。
+2. 安裝 BepInEx 到遊戲根目錄，先執行一次遊戲產生 `BepInEx/` 資料夾。
+3. 編譯 plugin：`cd plugin && dotnet build -c Release`（或跑 `plugin/build.cmd`，會自動複製到 `BepInEx/plugins/`）。缺遊戲/BepInEx 時建置會給清楚的錯誤提示。
+4. 啟動網頁伺服器：雙擊 `啟動 SP Advisor.cmd`（或 `node server.mjs`）→ 瀏覽器開 `http://localhost:8765`。
+5. 開遊戲進任務，海圖就會顯示即時戰況。
 
 ## 地圖資料
 

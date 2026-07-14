@@ -12,19 +12,25 @@
     <NoWarn>CS1701;CS1702;NU1701</NoWarn>
   </PropertyGroup>
 
-  <!-- 相對於本檔 (Sea Power/sp-advisor/plugin/) 的 ../../ = 遊戲根目錄 -->
+  <!-- 遊戲根目錄：預設本專案放在 <Sea Power>\sp-advisor\plugin\ 底下（../../）。
+       若放在別處，設定環境變數 SeaPowerDir 指向遊戲安裝資料夾即可覆蓋。 -->
   <PropertyGroup>
-    <GameRoot>$(MSBuildProjectDirectory)\..\..</GameRoot>
+    <GameRoot Condition="'$(SeaPowerDir)' != ''">$(SeaPowerDir)</GameRoot>
+    <GameRoot Condition="'$(SeaPowerDir)' == ''">$(MSBuildProjectDirectory)\..\..</GameRoot>
     <Managed>$(GameRoot)\Sea Power_Data\Managed</Managed>
   </PropertyGroup>
+
+  <!-- 前置檢查：別台電腦缺遊戲/BepInEx 時給清楚訊息，而非一堆「找不到參照」 -->
+  <Target Name="CheckPrereqs" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(Managed)\Seapower-Scripts.dll')"
+           Text="找不到遊戲組件 $(Managed)\Seapower-Scripts.dll。請把本專案放在 &lt;Sea Power&gt;\sp-advisor\ 底下，或設環境變數 SeaPowerDir 指向遊戲安裝資料夾。" />
+    <Error Condition="!Exists('$(GameRoot)\BepInEx\core\BepInEx.dll')"
+           Text="找不到 BepInEx（$(GameRoot)\BepInEx\core\BepInEx.dll）。請先安裝 BepInEx 5.x (win-x64, Mono) 到遊戲根目錄並執行一次遊戲。" />
+  </Target>
 
   <ItemGroup>
     <Reference Include="BepInEx">
       <HintPath>$(GameRoot)\BepInEx\core\BepInEx.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>$(GameRoot)\BepInEx\core\0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Seapower-Scripts">
