@@ -10,6 +10,8 @@
     <Deterministic>true</Deterministic>
     <!-- 遊戲組件是 net472/Mono；抑制跨框架參照的雜訊警告 -->
     <NoWarn>CS1701;CS1702;NU1701</NoWarn>
+    <!-- MSB3277：與遊戲組件的相依版本衝突，無害，降級為訊息不顯示 -->
+    <MSBuildWarningsAsMessages>MSB3277;MSB3276</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
   <!-- 遊戲根目錄：預設本專案放在 <Sea Power>\sp-advisor\plugin\ 底下（../../）。
