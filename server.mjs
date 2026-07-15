@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, extname, normalize } from "node:path";
-import { loadConfig, askAdvisor } from "./advisor.mjs";
+import { loadConfig, askAdvisor, ingest as tacticsIngest, noteCommand } from "./advisor.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "public");
@@ -95,6 +95,7 @@ const server = createServer(async (req, res) => {
       try {
         const cmd = JSON.parse(raw);
         commandQueue.push(cmd);
+        try { noteCommand(cmd); } catch {}   // 記錄玩家命令供顧問參考
         console.log(`[command] 收到指令 ${cmd.type} → 單位 ${cmd.unit}（佇列 ${commandQueue.length}）`);
         send(res, 200, JSON.stringify({ ok: true, queued: commandQueue.length }), MIME[".json"]);
       } catch (e) {
@@ -119,6 +120,7 @@ const server = createServer(async (req, res) => {
       try {
         liveState = JSON.parse(raw);
         liveAt = Date.now();
+        try { tacticsIngest(liveState); } catch (e) { console.error("[tactics]", e.message); }  // 更新事件/趨勢
         sseSend(`data: ${JSON.stringify({ time: liveAt, live: true, scenario: liveState })}\n\n`); // 立即推給所有瀏覽器
         send(res, 200, JSON.stringify({ ok: true }), MIME[".json"]);
       } catch (e) {
@@ -138,11 +140,12 @@ const server = createServer(async (req, res) => {
       const message = (body.message || "").toString();
       const cfg = await loadConfig();   // 每次讀，讓使用者不用重開就能填金鑰
       if (!cfg.apiKey) {
+        const envVar = cfg.provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
         return send(res, 200, JSON.stringify({ reply:
-          "尚未設定 Anthropic API 金鑰，顧問無法分析。請擇一設定：\n" +
-          "1) 設環境變數 ANTHROPIC_API_KEY（設好重開伺服器），或\n" +
+          `尚未設定 ${cfg.provider} 的 API 金鑰，顧問無法分析。請擇一設定：\n` +
+          `1) 設環境變數 ${envVar}（設好重開伺服器），或\n` +
           "2) 在 sp-advisor 資料夾建立 advisor.config.json：\n" +
-          '   {"apiKey":"sk-ant-...","model":"claude-sonnet-5"}\n' +
+          `   {"provider":"${cfg.provider}","apiKey":"...","model":"${cfg.model}"}\n` +
           "（金鑰只存在你本機、已被 .gitignore 排除、不會上傳。）" }), MIME[".json"]);
       }
       const fresh = liveState && (Date.now() - liveAt < 8000);

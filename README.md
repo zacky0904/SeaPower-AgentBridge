@@ -51,17 +51,22 @@
 
 ## AI 顧問（設定 API 金鑰）
 
-右側聊天視窗會把**當下的明面戰況摘要**（任務/環境/目標/己方單位與武器/接觸方位距離/情報/事件）加上你的問題送給 Claude，回你戰術建議。顧問只依據明面資料、不臆測未知資訊。
+伺服器端（`advisor.mjs`）不是把原始快照丟給模型，而是先用**程式/規則**做兩件事：
+- **壓縮層**：把每個接觸轉成戰術意義——威脅等級、相對方位/距離、**接近率**（觀測推算）、推測角色（低信心）、偵測來源。
+- **事件/趨勢偵測器**：比對連續快照產生事件（`CONTACT_CREATED/LOST/REACQUIRED`、`WEAPON_LAUNCH_DETECTED`、`TRACK_CLASSIFICATION_CHANGED`、`CONTACT_TURNED_TOWARD_FORMATION`、`TRACK_ACCELERATING`、`MAGAZINE_LOW`、`AIRCRAFT_LOW_FUEL`…）。
 
-需要你自己的 [Anthropic API 金鑰](https://console.anthropic.com/)，擇一設定（**金鑰只存在你本機，已被 `.gitignore` 排除，不會上傳**）：
+問模型時只送：**當前重要狀態 + 最近事件 + 任務目標 + 可採取動作 + 最近玩家命令**（上一次建議透過對話歷史帶入），讓模型感受到「戰局正在演化」。全程只用明面資料、不臆測未知（敵方載彈/鎖定、未偵測兵力等）。
 
-1. **環境變數**：設 `ANTHROPIC_API_KEY`（可再設 `SP_ADVISOR_MODEL`，預設 `claude-sonnet-5`），重開伺服器。
-2. **設定檔**：把 `advisor.config.example.json` 複製成 `advisor.config.json`，填入金鑰：
+支援 **Anthropic** 或 **OpenAI**，需要你自己的 API 金鑰（**金鑰只存在你本機，已被 `.gitignore` 排除，不會上傳**），擇一設定：
+
+1. **環境變數**：`SP_ADVISOR_PROVIDER`（`anthropic`／`openai`）、對應的 `ANTHROPIC_API_KEY` 或 `OPENAI_API_KEY`、選填 `SP_ADVISOR_MODEL`。
+2. **設定檔**：把 `advisor.config.example.json` 複製成 `advisor.config.json`：
    ```json
-   { "apiKey": "sk-ant-...", "model": "claude-sonnet-5" }
+   { "provider": "anthropic", "apiKey": "sk-ant-...", "model": "claude-sonnet-5" }
    ```
+   OpenAI 範例：`{ "provider": "openai", "apiKey": "sk-...", "model": "gpt-4o" }`
 
-金鑰在**伺服器端**使用，不會傳到瀏覽器。設定檔可即時生效（不必重開伺服器）。
+金鑰在**伺服器端**使用、不會傳到瀏覽器；設定檔可即時生效（不必重開伺服器）。
 
 ## 地圖資料
 

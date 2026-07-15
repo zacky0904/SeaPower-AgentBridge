@@ -1,4 +1,5 @@
 {
-  "apiKey": "sk-ant-在這裡貼上你的-Anthropic-API-金鑰",
+  "provider": "anthropic",
+  "apiKey": "在這裡貼上你的 API 金鑰（Anthropic sk-ant-... 或 OpenAI sk-...）",
   "model": "claude-sonnet-5"
 }
