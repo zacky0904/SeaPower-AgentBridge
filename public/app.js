@@ -8,7 +8,6 @@ let selectedId = null;
 let startWall = Date.now();
 let live = false;          // true = 遊戲即時資料（停用本地推算）
 let collapsedGroups = new Set();  // 記住被摺疊的 Fleet 資料夾
-let attacking = null;             // 攻擊目標選定中：{unit, target}
 let map = null;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -344,15 +343,8 @@ function logLine(t){ const f=document.getElementById("msglog");
   f.innerHTML=`<span class="t">${now}</span> ${t}<br>`+f.innerHTML; }
 
 // ── 航線規劃（Web → 遊戲）────────────────────────────────
-// 底部提示列：只在攻擊選標時顯示
-function updatePlanToolbar() {
-  const tb=document.getElementById("plan-toolbar");
-  if (attacking) {
-    tb.className="";
-    tb.innerHTML=`<span class="pt-hint">點選要攻擊的目標…（ESC 取消）</span><button id="pt-cancel" class="pt-ghost">取消</button>`;
-    tb.querySelector("#pt-cancel").onclick=cancelAttack;
-  } else { tb.className="hidden"; }
-}
+// 底部提示列（目前無模式，恆隱藏）
+function updatePlanToolbar() { document.getElementById("plan-toolbar").className="hidden"; }
 
 // ── 指令傳送（即時，無需批次送出）──────────────────────────
 async function sendCmd(o){
@@ -360,7 +352,7 @@ async function sendCmd(o){
     logLine(cmdDesc(o)); }catch{ logLine("指令送出失敗（伺服器？）"); }
 }
 function cmdDesc(o){ const u=o.unit; switch(o.type){
-  case "waypoint": return `單位 ${u} 加航點`;
+  case "waypoint": return o.replace ? `單位 ${u} 移動（轉向新航向）` : `單位 ${u} 加入航點`;
   case "clearwp": return `單位 ${u} 清除航點`;
   case "resume": return `單位 ${u} 恢復航向`;
   case "emcon": return `單位 ${u} EMCON ${o.on?"靜默":"輻射"}`;
@@ -407,8 +399,6 @@ function unitMenu(c){
   if(c.domain==="air") nav.push({label:"設定高度", sub:[500,1000,5000,10000,20000,30000].map(a=>({label:a+" ft",action:()=>sendCmd({type:"altitude",unit:u,num:a})}))});
   const sensorSub=(v)=>[{label:"開",action:()=>sendCmd({type:"sensor",unit:u,value:v,on:true})},{label:"關",action:()=>sendCmd({type:"sensor",unit:u,value:v,on:false})}];
   return [
-    {label:"⌖ 交戰目標…", danger:true, action:()=>startAttack(u)},
-    {sep:true},
     {label:"航行", sub:nav},
     {label:"感測器", sub:[
       {label:"空搜雷達", sub:sensorSub("air")},
@@ -423,14 +413,12 @@ function unitMenu(c){
     {label: d.emcon?"EMCON：解除靜默":"EMCON：靜默", action:()=>sendCmd({type:"emcon",unit:u,on:!d.emcon})},
   ];
 }
-function startAttack(u){ attacking={unit:u,target:null}; selectContact(u); updatePlanToolbar(); scheduleRender(); }
-
-// ── 攻擊目標 ────────────────────────────────────────────
-function setAttackTarget(id){ if(!attacking) return;
-  const c=state.scenario.contacts.find(x=>x.id===id); if(!c||c.own) return;
-  sendCmd({type:"attack",unit:attacking.unit,target:id});   // 即時下令
-  attacking=null; updatePlanToolbar(); scheduleRender(); }
-function cancelAttack(){ attacking=null; updatePlanToolbar(); scheduleRender(); }
+// ── 下令（比照遊戲：右鍵敵方=攻擊、右鍵空海=移動）────────────
+function orderAttack(selId, targetId){
+  const c=state.scenario.contacts.find(x=>x.id===targetId); if(!c||c.own) return;
+  sendCmd({type:"attack",unit:selId,target:targetId}); }
+function orderMove(selId, latlng, append){
+  sendCmd({type:"waypoint",unit:selId,replace:!append,points:[{lat:latlng.lat,lon:latlng.lng}]}); }
 
 // ── 即時輪詢 ────────────────────────────────────────────────
 let hadData = false;
@@ -456,7 +444,7 @@ async function pollLive() {
   } else {                                           // 無任務 → 空著
     live = false;
     if (hadData) logLine(d.live ? "任務單位已清空" : "與遊戲連線中斷");
-    state.scenario.contacts = []; selectedId = null; attacking = null; hideContextMenu();
+    state.scenario.contacts = []; selectedId = null; hideContextMenu();
     buildUnitList(); updateReadout(); updatePlanToolbar();
     document.getElementById("mission-name").textContent = "—";
     showWaiting(d.live ? "已連線 · 等待任務單位…" : "等待遊戲連線…（請開啟 Sea Power 並進入任務）");
@@ -489,28 +477,34 @@ async function init() {
   const hitContact = px => { let best=null, bestD=18;
     for (const c of state.scenario.contacts){ const p=project(c.lat,c.lon);
       const d=Math.hypot(p.x-px.x,p.y-px.y); if (d<bestD){bestD=d;best=c;} } return best; };
+  // 左鍵：僅選取單位（比照遊戲）
   map.on("click", e=>{
     hideContextMenu();
     if (!state) return;
     const best = hitContact(e.containerPoint);
-    if (attacking){ if (best && !best.own) setAttackTarget(best.id); return; } // 攻擊模式 → 點敵方即下令
-    if (best){ selectContact(best.id); buildUnitList(); return; }
-    // 空海：若已選己方單位 → 直接於此加一個航點（比照遊戲即時操作）
-    const sel = state.scenario.contacts.find(c=>c.id===selectedId);
-    if (sel && sel.own) sendCmd({type:"waypoint",unit:sel.id,replace:false,points:[{lat:e.latlng.lat,lon:e.latlng.lng}]});
+    if (best){ selectContact(best.id); buildUnitList(); }
   });
+  // 右鍵：對「已選的己方單位」下令（比照遊戲 UnitSelectedState）
+  //   右鍵己方 → 指令選單 · 右鍵敵方 → 攻擊 · 右鍵空海 → 移動(轉向) · Shift+右鍵空海 → 加航點
   map.on("contextmenu", e=>{
     if (e.originalEvent) e.originalEvent.preventDefault();
     hideContextMenu();
     if (!state) return;
     const best = hitContact(e.containerPoint);
-    if (best && best.own){ selectContact(best.id); buildUnitList();
-      showContextMenu(e.containerPoint.x, e.containerPoint.y, contactName(best), unitMenu(best)); }
+    if (best && best.own){                      // 己方單位 → 選單
+      selectContact(best.id); buildUnitList();
+      showContextMenu(e.containerPoint.x, e.containerPoint.y, contactName(best), unitMenu(best));
+      return;
+    }
+    const sel = state.scenario.contacts.find(c=>c.id===selectedId);
+    if (!sel || !sel.own){ logLine("先左鍵選一個己方單位，再右鍵下令"); return; }
+    if (best && !best.own){ orderAttack(sel.id, best.id); return; }        // 敵方 → 攻擊
+    orderMove(sel.id, e.latlng, e.originalEvent && e.originalEvent.shiftKey); // 空海 → 移動 / Shift 加航點
   });
   document.addEventListener("click", ev=>{ if (!ev.target.closest("#ctxmenu")) hideContextMenu(); });
   map.on("movestart zoomstart", hideContextMenu);
   window.addEventListener("keydown", e=>{
-    if (e.key==="Escape"){ hideContextMenu(); if(attacking){cancelAttack();return;} }
+    if (e.key==="Escape") hideContextMenu();
     if ((e.key==="f"||e.key==="F") && document.activeElement!==input) fitToContacts();
   });
 
@@ -522,7 +516,7 @@ async function init() {
   addMsg("戰術顧問待命。開啟遊戲任務後，海圖會顯示即時戰況；聊天引擎將於下一階段接上。","sys");
 
   setInterval(updateClock, 1000); updateClock();
-  setInterval(pollLive, 1000);
+  setInterval(pollLive, 250);
   pollLive();
   scheduleRender();
 }

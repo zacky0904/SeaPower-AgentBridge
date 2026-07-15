@@ -20,7 +20,7 @@ namespace SpAdvisor
         private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         private const string IngestUrl = "http://localhost:8765/api/ingest";
         private const string CommandsUrl = "http://localhost:8765/api/commands";
-        private const float Interval = 1.0f; // 每秒推一次
+        private const float Interval = 0.25f; // 每秒推 4 次（航向/位置更即時）
         private float _timer;
         private bool _posting;
         private bool _polling;
