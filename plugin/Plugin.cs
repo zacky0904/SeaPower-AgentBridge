@@ -272,21 +272,17 @@ namespace SpAdvisor
                     else if (v.Altitude.HasValue) alt = v.Altitude.Value.Value.Estimate;
                 } catch {}
 
-                // 航向(度,北為0)與航速(節)——暫停時物理速度會歸零，須避開
-                double speedKn, course;
-                if (isOwn) {
-                    // 己方：用單位實際航向/航速（節），暫停不歸零、低速也有航向
-                    try { course = ((ob.Heading.Value % 360) + 360) % 360; speedKn = Math.Abs(ob.Velocity.Value); }
-                    catch { var vv = v.UnityVelocityVector; double hh = Math.Sqrt(vv.x * vv.x + vv.z * vv.z);
-                        speedKn = hh * 1.9438445; course = hh > 0.05 ? (Math.Atan2(vv.x, vv.z) * 180.0 / Math.PI + 360) % 360 : 0; }
+                // 航向/航速：用航跡估計（明面）。暫停時物理速度歸零，故對「所有接觸」一致地
+                // 改用暫停前快取的最後已知值（敵我中立都一樣；暫停期間本就沒有新感測資料）。
+                var vel = v.UnityVelocityVector;
+                double h = Math.Sqrt(vel.x * vel.x + vel.z * vel.z);
+                double speedKn = h * 1.9438445;
+                double course = h > 0.05 ? (Math.Atan2(vel.x, vel.z) * 180.0 / Math.PI + 360) % 360 : 0;
+                if (paused) {
+                    if (_motionCache.TryGetValue(ob.UniqueID, out var m)) { course = m[0]; speedKn = m[1]; }
                 } else {
-                    // 敵/未知：用航跡估計（明面）；暫停時物理速度歸零 → 用暫停前的快取
-                    var vel = v.UnityVelocityVector;
-                    double h = Math.Sqrt(vel.x * vel.x + vel.z * vel.z);
-                    speedKn = h * 1.9438445;
-                    course = h > 0.05 ? (Math.Atan2(vel.x, vel.z) * 180.0 / Math.PI + 360) % 360 : 0;
-                    if (paused && _motionCache.TryGetValue(ob.UniqueID, out var m)) { course = m[0]; speedKn = m[1]; }
-                    else if (!paused) _motionCache[ob.UniqueID] = new[] { course, speedKn };
+                    if (_motionCache.Count > 4000) _motionCache.Clear();
+                    _motionCache[ob.UniqueID] = new[] { course, speedKn };
                 }
 
                 if (count > 0) contacts.Append(',');
