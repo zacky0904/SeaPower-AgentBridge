@@ -20,8 +20,10 @@ namespace SpAdvisor
         private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         private const string IngestUrl = "http://localhost:8765/api/ingest";
         private const string CommandsUrl = "http://localhost:8765/api/commands";
-        private const float Interval = 0.1f; // 每秒推 10 次（航向/位置更即時）
+        private const float Interval = 0.05f;    // 狀態推送 20Hz（航向/位置更即時）
+        private const float CmdInterval = 0.033f; // 指令輪詢 ~30Hz（動作近乎即時）
         private float _timer;
+        private float _cmdTimer;
         private bool _posting;
         private bool _polling;
         private int _lastCount = -1;
@@ -35,6 +37,8 @@ namespace SpAdvisor
         private void Update()
         {
             DrainCommands();   // 主執行緒：執行 Web 下的指令
+            _cmdTimer += Time.unscaledDeltaTime;
+            if (_cmdTimer >= CmdInterval) { _cmdTimer = 0f; PollCommands(); }  // ~30Hz 指令輪詢（獨立於推送）
             _timer += Time.unscaledDeltaTime;
             if (_timer < Interval) return;
             _timer = 0f;
@@ -47,7 +51,6 @@ namespace SpAdvisor
             {
                 Logger.LogWarning("snapshot 失敗: " + e.Message);
             }
-            PollCommands();    // 背景：拉取新指令
         }
 
         // ── Web → 遊戲 下指令 ────────────────────────────────
@@ -113,7 +116,7 @@ namespace SpAdvisor
             if (cmd.type == "select")
             {
                 if (Singleton<RenderPosition>.InstanceExists())
-                    Singleton<RenderPosition>.Instance.switchToObject(ob, true, false, true);
+                    Singleton<RenderPosition>.Instance.switchToObject(ob, false, false, false); // 瞬間切換（比照遊戲點選）
                 Logger.LogInfo($"聚焦單位 {cmd.unit}");
                 return;
             }

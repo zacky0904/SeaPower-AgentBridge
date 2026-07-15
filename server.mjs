@@ -25,6 +25,9 @@ const MIME = {
 let liveState = null;   // 遊戲推入的真實戰況（有就優先於 mock）
 let liveAt = 0;
 let commandQueue = [];  // Web 下的指令，等 plugin 來拉取執行
+const sseClients = new Set();  // SSE 串流連線（狀態一有更新立即推播，免輪詢）
+
+function sseSend(payload) { for (const c of sseClients) { try { c.write(payload); } catch {} } }
 
 const scenario = {
   name: "Bab al-Mandab — 強行突破",
@@ -68,6 +71,21 @@ const server = createServer(async (req, res) => {
     return send(res, 200, JSON.stringify({ time: Date.now(), live: false }), MIME[".json"]);
   }
 
+  // SSE 串流：狀態一更新就立即推給瀏覽器（取代 100ms 輪詢，降延遲）
+  if (url.pathname === "/api/stream") {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Connection": "keep-alive",
+    });
+    res.write("retry: 2000\n\n");
+    const fresh = liveState && (Date.now() - liveAt < 5000);
+    res.write(`data: ${JSON.stringify(fresh ? { time: Date.now(), live: true, scenario: liveState } : { time: Date.now(), live: false })}\n\n`);
+    sseClients.add(res);
+    req.on("close", () => sseClients.delete(res));
+    return;
+  }
+
   // Web → 下指令（排入佇列，等 plugin 拉取）
   if (url.pathname === "/api/command" && req.method === "POST") {
     let raw = "";
@@ -100,7 +118,7 @@ const server = createServer(async (req, res) => {
       try {
         liveState = JSON.parse(raw);
         liveAt = Date.now();
-        console.log(`[ingest] 收到即時戰況：接觸 ${liveState?.contacts?.length ?? "?"} 個`);
+        sseSend(`data: ${JSON.stringify({ time: liveAt, live: true, scenario: liveState })}\n\n`); // 立即推給所有瀏覽器
         send(res, 200, JSON.stringify({ ok: true }), MIME[".json"]);
       } catch (e) {
         send(res, 400, JSON.stringify({ ok: false, error: String(e) }), MIME[".json"]);
@@ -135,6 +153,13 @@ const server = createServer(async (req, res) => {
     send(res, 404, "not found");
   }
 });
+
+// 心跳：資料過期時通知瀏覽器（顯示等待），新鮮時送註解保活
+setInterval(() => {
+  if (sseClients.size === 0) return;
+  const fresh = liveState && (Date.now() - liveAt < 3000);
+  sseSend(fresh ? ": ping\n\n" : `data: ${JSON.stringify({ time: Date.now(), live: false })}\n\n`);
+}, 1000);
 
 server.listen(PORT, () => {
   console.log(`SP Advisor 已啟動 → http://localhost:${PORT}`);

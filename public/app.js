@@ -424,11 +424,9 @@ function orderAttack(selId, targetId){
 function orderMove(selId, latlng, append){
   sendCmd({type:"waypoint",unit:selId,replace:!append,points:[{lat:latlng.lat,lon:latlng.lng}]}); }
 
-// ── 即時輪詢 ────────────────────────────────────────────────
+// ── 即時資料（SSE 串流，狀態一到就套用；輪詢為後備）─────────────
 let hadData = false;
-async function pollLive() {
-  let d;
-  try { d = await (await fetch("/api/state")).json(); } catch { return; }
+function applyState(d) {
   const cs = (d.live && d.scenario && d.scenario.contacts) || [];
   if (cs.length) {                                   // 有任務單位 → 顯示
     live = true; hideWaiting();
@@ -455,6 +453,18 @@ async function pollLive() {
     hadData = false;
     scheduleRender();
   }
+}
+async function pollLive() {                       // 後備：沒有 SSE 時輪詢
+  let d;
+  try { d = await (await fetch("/api/state")).json(); } catch { return; }
+  applyState(d);
+}
+function startLiveFeed() {
+  if (!window.EventSource) { setInterval(pollLive, 200); return; }   // 舊瀏覽器 → 輪詢
+  let es;
+  try { es = new EventSource("/api/stream"); } catch { setInterval(pollLive, 200); return; }
+  es.onmessage = ev => { try { applyState(JSON.parse(ev.data)); } catch {} };
+  // EventSource 斷線會自動重連；伺服器心跳會在遊戲斷線時送 live:false
 }
 
 // ── 啟動 ────────────────────────────────────────────────────
@@ -520,8 +530,7 @@ async function init() {
   addMsg("戰術顧問待命。開啟遊戲任務後，海圖會顯示即時戰況；聊天引擎將於下一階段接上。","sys");
 
   setInterval(updateClock, 1000); updateClock();
-  setInterval(pollLive, 100);
-  pollLive();
+  startLiveFeed();
   scheduleRender();
 }
 window.addEventListener("resize", sizeCanvas);
