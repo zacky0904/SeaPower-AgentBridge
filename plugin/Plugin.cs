@@ -94,6 +94,7 @@ namespace SpAdvisor
                     if (el.TryGetProperty("salvo", out var s)) cmd.salvo = s.GetInt32();
                     if (el.TryGetProperty("on", out var o)) cmd.on = o.GetBoolean();
                     if (el.TryGetProperty("value", out var v)) cmd.value = v.GetString();
+                    if (el.TryGetProperty("ammo", out var am)) cmd.ammo = am.GetString();
                     if (el.TryGetProperty("num", out var n)) cmd.num = n.GetDouble();
                     if (el.TryGetProperty("replace", out var r)) cmd.replace = r.GetBoolean();
                     if (el.TryGetProperty("points", out var pts))
@@ -135,9 +136,10 @@ namespace SpAdvisor
                     {
                         var target = CoreService.FindByUID(cmd.target);
                         if (target == null) { Logger.LogWarning("attack: 找不到目標 " + cmd.target); return; }
-                        string ammo = ob.GetDefaultAmmunitionForEngage(target);
+                        // 有指定武器就用指定的，否則用遊戲判定的預設
+                        string ammo = !string.IsNullOrEmpty(cmd.ammo) ? cmd.ammo : ob.GetDefaultAmmunitionForEngage(target);
                         if (string.IsNullOrEmpty(ammo) || ob.getAmmunitionAmountByName(ammo) <= 0)
-                        { Logger.LogInfo($"單位 {cmd.unit} 對 {cmd.target} 無可用武器"); return; }
+                        { Logger.LogInfo($"單位 {cmd.unit} 對 {cmd.target} 無可用武器（{ammo}）"); return; }
                         int salvo = cmd.salvo > 0 ? cmd.salvo : 1;
                         var task = new EngageTask(ammo, target, ob, salvo) { _ignoreIfUndetected = true };
                         ob.AddEngageTask(task);
@@ -357,6 +359,13 @@ namespace SpAdvisor
                                       .Append(",\"rmax\":").Append(Num(rmax));
                                 if (!string.IsNullOrEmpty(am._ap._displayedType))
                                     sb.Append(",\"wt\":").Append(JStr(am._ap._displayedType));
+                                // 可打的目標類型（aaw/asuw/asw）— 讓 Web 交戰選單只列出適用武器
+                                string tt = am._ap._targetType.ToString().ToLowerInvariant();
+                                if (tt != "unknown") sb.Append(",\"tt\":").Append(JStr(tt));
+                                if (am._ap._hasSecondaryTargetType) {
+                                    string tt2 = am._ap._secondaryTargetType.ToString().ToLowerInvariant();
+                                    if (tt2 != "unknown") sb.Append(",\"tt2\":").Append(JStr(tt2));
+                                }
                             }
                         } catch {}
                         sb.Append('}');
@@ -488,5 +497,6 @@ namespace SpAdvisor
         public bool on;
         public string value;
         public double num;
+        public string ammo;   // 指定交戰武器（空 = 用預設）
     }
 }

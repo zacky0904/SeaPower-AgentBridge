@@ -360,7 +360,7 @@ function cmdDesc(o){ const u=o.unit; switch(o.type){
   case "altitude": return `單位 ${u} 高度 ${o.num} ft`;
   case "weaponstatus": return `單位 ${u} 武器 ${o.value}`;
   case "sensor": return `單位 ${u} 感測 ${o.value} ${o.on?"開":"關"}`;
-  case "attack": return `單位 ${u} 攻擊 ${o.target}`;
+  case "attack": return `單位 ${u} 攻擊 ${o.target}${o.ammo?`（${o.ammo} ×${o.salvo||1}）`:""}`;
   case "select": return `遊戲鏡頭聚焦單位 ${u}`;
   default: return `指令 ${o.type}`; } }
 
@@ -417,12 +417,25 @@ function unitMenu(c){
     {label: d.emcon?"EMCON：解除靜默":"EMCON：靜默", action:()=>sendCmd({type:"emcon",unit:u,on:!d.emcon})},
   ];
 }
-// ── 下令（比照遊戲：右鍵敵方=攻擊、右鍵空海=移動）────────────
-function orderAttack(selId, targetId){
-  const c=state.scenario.contacts.find(x=>x.id===targetId); if(!c||c.own) return;
-  sendCmd({type:"attack",unit:selId,target:targetId}); }
+// ── 下令（比照遊戲：右鍵敵方=選武器交戰、右鍵空海=移動）────────
 function orderMove(selId, latlng, append){
   sendCmd({type:"waypoint",unit:selId,replace:!append,points:[{lat:latlng.lat,lon:latlng.lng}]}); }
+// 右鍵敵方的武器選單（比照遊戲 EngageWith）：只列適用該目標的武器 + 齊射數
+function weaponsFor(sel, target){
+  const ammo = (sel.detail && sel.detail.ammo) || [];
+  const need = target.domain==="air" ? "aaw" : (target.domain==="subsurface" ? "asw" : "asuw");
+  const dist = nm(sel, target);
+  const usable = ammo.filter(a => a.c>0 && (!a.tt || a.tt===need || a.tt2===need));
+  if (!usable.length) return [{ label:"⚠ 無可用於此目標的武器" }];
+  return usable.map(a=>{
+    const inRange = a.rmax ? (dist>=(a.rmin||0) && dist<=a.rmax) : true;
+    const rng = a.rmax ? `${a.rmin>0.5?Math.round(a.rmin)+"–":""}${Math.round(a.rmax)} nm` : "";
+    const salvos = [1,2,4].filter(s=>s<=a.c);
+    return { label:`${inRange?"⌖":"⚠"} ${a.dn||a.n} ×${a.c}${rng?` · ${rng}`:""}`,
+      sub: salvos.map(s=>({ label:`射 ${s} 發`,
+        action:()=>sendCmd({type:"attack",unit:sel.id,target:target.id,ammo:a.n,salvo:s}) })) };
+  });
+}
 
 // ── 即時資料（SSE 串流，狀態一到就套用；輪詢為後備）─────────────
 let hadData = false;
@@ -512,7 +525,9 @@ async function init() {
     }
     const sel = state.scenario.contacts.find(c=>c.id===selectedId);
     if (!sel || !sel.own){ logLine("先左鍵選一個己方單位，再右鍵下令"); return; }
-    if (best && !best.own){ orderAttack(sel.id, best.id); return; }        // 敵方 → 攻擊
+    if (best && !best.own){                                                 // 敵方 → 選武器交戰（EngageWith）
+      showContextMenu(e.containerPoint.x, e.containerPoint.y, `交戰 ${contactName(best)}`, weaponsFor(sel, best));
+      return; }
     orderMove(sel.id, e.latlng, e.originalEvent && e.originalEvent.shiftKey); // 空海 → 移動 / Shift 加航點
   });
   document.addEventListener("click", ev=>{ if (!ev.target.closest("#ctxmenu")) hideContextMenu(); });
