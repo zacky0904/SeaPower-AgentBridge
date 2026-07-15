@@ -5,7 +5,11 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, extname, normalize } from "node:path";
+import dns from "node:dns";
 import { loadConfig, saveAiConfig, askAdvisor, ingest as tacticsIngest, noteCommand } from "./advisor.mjs";
+
+// IPv6 半殘的網路：Node 預設會先試 AAAA(IPv6)，連不上要等逾時。優先用 IPv4 避免卡住。
+try { dns.setDefaultResultOrder("ipv4first"); } catch {}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "public");
