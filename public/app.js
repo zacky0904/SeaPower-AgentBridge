@@ -262,7 +262,7 @@ function buildUnitList() {
       const li=document.createElement("li"); li.className="u-item"; li.dataset.id=c.id;
       li.innerHTML=`<span class="dot" style="background:${relColor(c.relation)}"></span>
         <span class="u-name">${contactName(c)}<div class="u-sub">${c.type||domainName(c.domain)} · ${Math.round(c.speed)}kn</div></span>`;
-      li.onclick=()=>{ selectContact(c.id); const t=state.scenario.contacts.find(x=>x.id===c.id);
+      li.onclick=()=>{ selectContact(c.id); focusInGame(c.id); const t=state.scenario.contacts.find(x=>x.id===c.id);
         if (t&&map) map.panTo([t.lat,t.lon]); };
       if (c.id===selectedId) li.classList.add("sel");
       ul.appendChild(li);
@@ -361,7 +361,11 @@ function cmdDesc(o){ const u=o.unit; switch(o.type){
   case "weaponstatus": return `單位 ${u} 武器 ${o.value}`;
   case "sensor": return `單位 ${u} 感測 ${o.value} ${o.on?"開":"關"}`;
   case "attack": return `單位 ${u} 攻擊 ${o.target}`;
+  case "select": return `遊戲鏡頭聚焦單位 ${u}`;
   default: return `指令 ${o.type}`; } }
+
+// 讓遊戲畫面切到對應目標（比照遊戲點選單位 → 鏡頭跟隨）
+function focusInGame(id){ sendCmd({type:"select",unit:id}); }
 
 // ── 右鍵情境選單 ────────────────────────────────────────
 function buildMenu(items, container){
@@ -482,7 +486,7 @@ async function init() {
     hideContextMenu();
     if (!state) return;
     const best = hitContact(e.containerPoint);
-    if (best){ selectContact(best.id); buildUnitList(); }
+    if (best){ selectContact(best.id); buildUnitList(); focusInGame(best.id); }
   });
   // 右鍵：對「已選的己方單位」下令（比照遊戲 UnitSelectedState）
   //   右鍵己方 → 指令選單 · 右鍵敵方 → 攻擊 · 右鍵空海 → 移動(轉向) · Shift+右鍵空海 → 加航點
@@ -516,7 +520,7 @@ async function init() {
   addMsg("戰術顧問待命。開啟遊戲任務後，海圖會顯示即時戰況；聊天引擎將於下一階段接上。","sys");
 
   setInterval(updateClock, 1000); updateClock();
-  setInterval(pollLive, 250);
+  setInterval(pollLive, 100);
   pollLive();
   scheduleRender();
 }

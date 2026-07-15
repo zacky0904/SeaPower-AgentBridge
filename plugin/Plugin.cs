@@ -20,7 +20,7 @@ namespace SpAdvisor
         private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         private const string IngestUrl = "http://localhost:8765/api/ingest";
         private const string CommandsUrl = "http://localhost:8765/api/commands";
-        private const float Interval = 0.25f; // 每秒推 4 次（航向/位置更即時）
+        private const float Interval = 0.1f; // 每秒推 10 次（航向/位置更即時）
         private float _timer;
         private bool _posting;
         private bool _polling;
@@ -108,7 +108,16 @@ namespace SpAdvisor
         private void ExecuteCommand(PendingCmd cmd)
         {
             var ob = CoreService.FindByUID(cmd.unit);
-            if (ob == null || !ob.IsPlayerObject) { Logger.LogWarning($"指令 {cmd.type}: 找不到可控單位 {cmd.unit}"); return; }
+            if (ob == null) { Logger.LogWarning($"指令 {cmd.type}: 找不到單位 {cmd.unit}"); return; }
+            // 選取/聚焦：任何接觸都可（含敵方），讓遊戲鏡頭切到對應目標（比照遊戲 SelectUnitCommand）
+            if (cmd.type == "select")
+            {
+                if (Singleton<RenderPosition>.InstanceExists())
+                    Singleton<RenderPosition>.Instance.switchToObject(ob, true, false, true);
+                Logger.LogInfo($"聚焦單位 {cmd.unit}");
+                return;
+            }
+            if (!ob.IsPlayerObject) { Logger.LogWarning($"指令 {cmd.type}: 非可控單位 {cmd.unit}"); return; }
             switch (cmd.type)
             {
                 case "waypoint":
