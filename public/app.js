@@ -406,17 +406,23 @@ document.getElementById("day-night").onclick=e=>{
 
 function esc(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
-// ── 事件日誌（我方動作 + 遊戲事件合併，最新在前）──────────────
-let localLog = [];
-function logLine(t){ localLog.unshift({t:new Date().toLocaleTimeString(), x:t});
-  if (localLog.length>40) localLog.pop(); renderEvents(); }
+// ── 事件日誌：分「戰況」（遊戲真實事件 + 我方動作）與「Debug」（工具系統訊息）──
+let localLog = [];          // {t, x, kind}  kind: "act"=我方動作 / "sys"=系統/連線/Debug
+let showDebug = false;      // 是否顯示 Debug 訊息
+function logLine(t, kind){ localLog.unshift({t:new Date().toLocaleTimeString(), x:t, kind:kind||"sys"});
+  if (localLog.length>60) localLog.pop(); renderEvents(); }
 function renderEvents(){
   const f=document.getElementById("msglog"); if(!f) return;
-  const ev=(state&&state.scenario.events)||[];
-  let h="";
-  for (const e of localLog) h+=`<div class="ev me"><span class="t">${e.t}</span> » ${esc(e.x)}</div>`;
-  for (const e of ev) h+=`<div class="ev"><span class="t">${esc(e.time)}</span> ${esc(e.text)}</div>`;
+  const game=(state&&state.scenario.events)||[];
+  const acts=localLog.filter(e=>e.kind==="act");
+  const dbg=localLog.filter(e=>e.kind!=="act");
+  let h=`<div class="ev-head">事件 <span class="ev-count">戰況 ${game.length+acts.length}</span>`+
+        `<span class="ev-tog${showDebug?" on":""}" id="ev-dbg">Debug ${dbg.length}</span></div>`;
+  for (const e of acts) h+=`<div class="ev act"><span class="t">${e.t}</span> » ${esc(e.x)}</div>`;
+  for (const e of game) h+=`<div class="ev game"><span class="t">${esc(e.time)}</span> ${esc(e.text)}</div>`;
+  if (showDebug) for (const e of dbg) h+=`<div class="ev dbg"><span class="t">${e.t}</span> · ${esc(e.x)}</div>`;
   f.innerHTML=h;
+  const tog=document.getElementById("ev-dbg"); if(tog) tog.onclick=()=>{ showDebug=!showDebug; renderEvents(); };
 }
 
 // ── 環境列（頂欄）────────────────────────────────────────────
@@ -470,7 +476,7 @@ function updatePlanToolbar() { document.getElementById("plan-toolbar").className
 // ── 指令傳送（即時，無需批次送出）──────────────────────────
 async function sendCmd(o){
   try{ await fetch("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)});
-    logLine(cmdDesc(o)); }catch{ logLine("指令送出失敗（伺服器？）"); }
+    logLine(cmdDesc(o), "act"); }catch{ logLine("指令送出失敗（伺服器？）"); }
 }
 function cmdDesc(o){ const u=o.unit; switch(o.type){
   case "waypoint": return o.replace ? `單位 ${u} 移動（轉向新航向）` : `單位 ${u} 加入航點`;

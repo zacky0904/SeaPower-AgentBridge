@@ -227,4 +227,14 @@ aside { background:var(--panel); display:flex; flex-direction:column; min-height
 }
 #msglog .t { color:var(--accent); font-family:var(--font-mono); }
 .ev { line-height:1.5; }
-.ev.me { color:var(--ink); }
+.ev.act { color:var(--ink); }
+.ev.game { color:var(--ink); }
+.ev.dbg { color:var(--ink-dim); opacity:0.8; }
+.ev-head { position:sticky; top:-6px; display:flex; align-items:center; gap:8px;
+  padding:2px 0 4px; margin:-6px 0 3px; background:var(--panel-2);
+  font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--ink-dim); }
+.ev-count { color:var(--ink-dim); }
+.ev-tog { margin-left:auto; cursor:pointer; padding:1px 7px; border:1px solid var(--border);
+  border-radius:8px; color:var(--ink-dim); user-select:none; }
+.ev-tog:hover { border-color:var(--accent); color:var(--ink); }
+.ev-tog.on { background:var(--accent); color:#04121a; border-color:var(--accent); }
