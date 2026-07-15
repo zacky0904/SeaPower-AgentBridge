@@ -404,6 +404,45 @@ document.getElementById("day-night").onclick=e=>{
   e.target.textContent=document.body.classList.contains("night")?"日間":"夜間";
 };
 
+// ── AI 顧問狀態燈 + 設定面板 ──────────────────────────────
+let aiCfg={configured:false,provider:"anthropic",model:"",keyFromEnv:false};
+function setAiDot(cls){ document.getElementById("ai-dot").className=cls||""; }
+function renderAiStatus(){
+  setAiDot(aiCfg.configured?"on":"");
+  document.getElementById("ai-label").textContent=aiCfg.configured?"AI 就緒":"AI 未設定";
+  const kv=document.getElementById("aip-key");
+  kv.textContent=aiCfg.configured?(aiCfg.keyFromEnv?"已設定（環境變數）":"已設定（設定檔）"):"未設定";
+  kv.className=aiCfg.configured?"set":"unset";
+  document.getElementById("aip-provider").value=aiCfg.provider||"anthropic";
+  document.getElementById("aip-model").value=aiCfg.model||"";
+  document.getElementById("aip-env").textContent=aiCfg.provider==="openai"?"OPENAI_API_KEY":"ANTHROPIC_API_KEY";
+}
+async function pollAiStatus(){ try{ aiCfg=await (await fetch("/api/ai/status")).json(); renderAiStatus(); }catch{} }
+document.getElementById("ai-status").onclick=()=>{
+  const p=document.getElementById("ai-panel"); p.classList.toggle("hidden");
+  if(!p.classList.contains("hidden")){ pollAiStatus(); document.getElementById("aip-msg").textContent=""; }
+};
+document.getElementById("aip-provider").onchange=e=>{
+  document.getElementById("aip-env").textContent=e.target.value==="openai"?"OPENAI_API_KEY":"ANTHROPIC_API_KEY";
+  document.getElementById("aip-model").placeholder=e.target.value==="openai"?"gpt-4o":"claude-sonnet-5";
+};
+document.getElementById("aip-save").onclick=async()=>{
+  const provider=document.getElementById("aip-provider").value, model=document.getElementById("aip-model").value.trim();
+  const msg=document.getElementById("aip-msg"); msg.className="aip-msg"; msg.textContent="儲存中…";
+  try{ aiCfg=await (await fetch("/api/ai/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({provider,model})})).json();
+    renderAiStatus(); msg.className="aip-msg ok"; msg.textContent="已儲存"; }
+  catch{ msg.className="aip-msg err"; msg.textContent="儲存失敗"; }
+};
+document.getElementById("aip-test").onclick=async()=>{
+  const msg=document.getElementById("aip-msg"); msg.className="aip-msg"; msg.textContent="測試中…"; setAiDot("busy");
+  try{ const r=await (await fetch("/api/ai/test",{method:"POST"})).json();
+    if(r.ok){ msg.className="aip-msg ok"; msg.textContent="連線成功："+(r.sample||"OK"); aiCfg.configured=true; setAiDot("on"); }
+    else { msg.className="aip-msg err"; msg.textContent="失敗："+(r.error||"?"); setAiDot("err"); } }
+  catch{ msg.className="aip-msg err"; msg.textContent="失敗（伺服器沒開？）"; setAiDot("err"); }
+};
+document.addEventListener("click", ev=>{ const p=document.getElementById("ai-panel"), b=document.getElementById("ai-status");
+  if(p && !p.classList.contains("hidden") && !p.contains(ev.target) && !b.contains(ev.target)) p.classList.add("hidden"); });
+
 function esc(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 // ── 事件日誌：分「戰況」（遊戲真實事件 + 我方動作）與「Debug」（工具系統訊息）──
@@ -736,6 +775,7 @@ async function init() {
   addMsg("戰術顧問已就緒。開啟任務後可直接問我戰況分析、交戰建議、威脅評估等。（需先設定 Anthropic API 金鑰——見 README）","sys");
 
   setInterval(updateClock, 1000); updateClock();
+  pollAiStatus(); setInterval(pollAiStatus, 5000);   // AI 狀態燈
   startLiveFeed();
   scheduleRender();
 }

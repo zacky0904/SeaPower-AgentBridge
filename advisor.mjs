@@ -2,22 +2,33 @@
 // 設計：程式/規則先把原始快照「壓縮成戰術意義」+ 偵測「事件/趨勢」，
 // 只把「當前重要狀態 + 最近事件 + 目標 + 可採取動作 + 最近玩家命令」送給 LLM。
 // 只用明面（玩家已知）資料；不臆測敵方內部資訊。支援 Anthropic 或 OpenAI。
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const CFG_PATH = join(__dirname, "advisor.config.json");
 
 // ── 設定（provider / 金鑰 / 模型）──────────────────────────
 export async function loadConfig() {
   let f = {};
-  try { f = JSON.parse(await readFile(join(__dirname, "advisor.config.json"), "utf8")); } catch {}
+  try { f = JSON.parse(await readFile(CFG_PATH, "utf8")); } catch {}
   const provider = (process.env.SP_ADVISOR_PROVIDER || f.provider || "anthropic").toLowerCase();
   const apiKey = provider === "openai"
     ? (process.env.OPENAI_API_KEY || f.apiKey || "")
     : (process.env.ANTHROPIC_API_KEY || f.apiKey || "");
   const model = process.env.SP_ADVISOR_MODEL || f.model || (provider === "openai" ? "gpt-4o" : "claude-sonnet-5");
-  return { provider, apiKey, model };
+  const keyFromEnv = provider === "openai" ? !!process.env.OPENAI_API_KEY : !!process.env.ANTHROPIC_API_KEY;
+  return { provider, apiKey, model, keyFromEnv };
+}
+
+// 只存 provider/model（保留既有金鑰；不在此處理金鑰輸入）
+export async function saveAiConfig(provider, model) {
+  let f = {};
+  try { f = JSON.parse(await readFile(CFG_PATH, "utf8")); } catch {}
+  if (provider) f.provider = String(provider).toLowerCase();
+  if (model !== undefined) f.model = String(model);
+  await writeFile(CFG_PATH, JSON.stringify(f, null, 2), "utf8");
 }
 
 // ── 地理 / 向量 ──────────────────────────────────────────

@@ -15,9 +15,22 @@
       <div id="mission-name">—</div>
       <div id="env" class="mono"></div>
       <div class="spacer"></div>
+      <button id="ai-status" class="chip" title="AI 顧問設定"><span id="ai-dot"></span><span id="ai-label">AI</span></button>
       <button id="day-night" class="chip" title="日/夜配色">夜間</button>
       <div id="clock" class="mono">T + 00:00:00</div>
     </header>
+
+    <!-- AI 顧問設定面板 -->
+    <div id="ai-panel" class="hidden">
+      <div class="aip-title">AI 顧問設定</div>
+      <div class="aip-row"><label>供應商</label>
+        <select id="aip-provider"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI</option></select></div>
+      <div class="aip-row"><label>模型</label><input id="aip-model" type="text" placeholder="claude-sonnet-5" /></div>
+      <div class="aip-row"><label>金鑰</label><span id="aip-key">—</span></div>
+      <div class="aip-hint">金鑰請用環境變數（<span class="mono" id="aip-env">ANTHROPIC_API_KEY</span>）或 <span class="mono">advisor.config.json</span> 設定，不在此輸入以免外洩。</div>
+      <div class="aip-btns"><button id="aip-save">儲存</button><button id="aip-test" class="pt-ghost">測試連線</button></div>
+      <div id="aip-msg" class="aip-msg"></div>
+    </div>
 
     <div id="main">
       <!-- 左：單位/編隊清單 -->

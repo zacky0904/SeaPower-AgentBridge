@@ -64,6 +64,38 @@ body {
 }
 .chip:hover { border-color:var(--accent); }
 
+/* AI 狀態燈 + 設定面板 */
+#ai-status { display:flex; align-items:center; gap:6px; }
+#ai-dot { width:9px; height:9px; border-radius:50%; background:var(--ink-dim); box-shadow:0 0 0 1px rgba(0,0,0,0.3) inset; flex:none; }
+#ai-dot.on { background:#2ec26a; box-shadow:0 0 6px #2ec26a; }
+#ai-dot.busy { background:#e5b73b; box-shadow:0 0 6px #e5b73b; }
+#ai-dot.err { background:var(--c-hostile); box-shadow:0 0 6px var(--c-hostile); }
+#ai-panel {
+  position:absolute; top:40px; right:10px; z-index:900; width:280px; padding:12px;
+  background:rgba(14,20,26,0.98); border:1px solid var(--border); border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.5); font-size:12px; color:var(--ink);
+}
+#ai-panel.hidden { display:none; }
+.aip-title { color:var(--accent); font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; }
+.aip-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.aip-row label { width:52px; color:var(--ink-dim); flex:none; }
+.aip-row select, .aip-row input {
+  flex:1; background:var(--bg); color:var(--ink); border:1px solid var(--border);
+  border-radius:4px; padding:4px 6px; font-family:inherit; font-size:12px;
+}
+.aip-row select:focus, .aip-row input:focus { outline:none; border-color:var(--accent); }
+#aip-key.set { color:#2ec26a; } #aip-key.unset { color:var(--c-hostile); }
+.aip-hint { color:var(--ink-dim); font-size:11px; line-height:1.5; margin:4px 0 8px; }
+.aip-btns { display:flex; gap:8px; }
+.aip-btns button {
+  background:var(--accent); color:#04121a; border:none; border-radius:5px;
+  padding:5px 12px; font-weight:700; cursor:pointer; font-family:inherit;
+}
+.aip-btns button.pt-ghost { background:var(--panel); color:var(--ink); border:1px solid var(--border); }
+.aip-btns button:hover { filter:brightness(1.1); }
+.aip-msg { margin-top:8px; font-size:11px; color:var(--ink-dim); line-height:1.4; min-height:14px; white-space:pre-wrap; }
+.aip-msg.ok { color:#2ec26a; } .aip-msg.err { color:var(--c-hostile); }
+
 /* 主區 */
 #main { flex:1; display:grid; grid-template-columns: 220px 1fr 340px; min-height:0; }
 aside { background:var(--panel); display:flex; flex-direction:column; min-height:0; }

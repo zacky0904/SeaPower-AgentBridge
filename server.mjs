@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, extname, normalize } from "node:path";
-import { loadConfig, askAdvisor, ingest as tacticsIngest, noteCommand } from "./advisor.mjs";
+import { loadConfig, saveAiConfig, askAdvisor, ingest as tacticsIngest, noteCommand } from "./advisor.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "public");
@@ -70,6 +70,38 @@ const server = createServer(async (req, res) => {
       return send(res, 200, JSON.stringify({ time: Date.now(), live: false, demo: true, scenario }), MIME[".json"]);
     }
     return send(res, 200, JSON.stringify({ time: Date.now(), live: false }), MIME[".json"]);
+  }
+
+  // AI 顧問狀態（不回傳金鑰本身）
+  if (url.pathname === "/api/ai/status") {
+    const cfg = await loadConfig();
+    return send(res, 200, JSON.stringify({ configured: !!cfg.apiKey, provider: cfg.provider, model: cfg.model, keyFromEnv: cfg.keyFromEnv }), MIME[".json"]);
+  }
+  // 儲存 provider/model（不碰金鑰）
+  if (url.pathname === "/api/ai/config" && req.method === "POST") {
+    let raw = ""; req.on("data", c => raw += c);
+    req.on("end", async () => {
+      let b = {}; try { b = JSON.parse(raw); } catch {}
+      try {
+        await saveAiConfig(b.provider, b.model);
+        const cfg = await loadConfig();
+        send(res, 200, JSON.stringify({ ok: true, configured: !!cfg.apiKey, provider: cfg.provider, model: cfg.model, keyFromEnv: cfg.keyFromEnv }), MIME[".json"]);
+      } catch (e) { send(res, 200, JSON.stringify({ ok: false, error: String(e.message || e) }), MIME[".json"]); }
+    });
+    return;
+  }
+  // 測試連線（實際打一次很短的請求驗證金鑰可用）
+  if (url.pathname === "/api/ai/test" && req.method === "POST") {
+    req.on("data", () => {});
+    req.on("end", async () => {
+      const cfg = await loadConfig();
+      if (!cfg.apiKey) return send(res, 200, JSON.stringify({ ok: false, error: "尚未設定金鑰" }), MIME[".json"]);
+      try {
+        const sample = await askAdvisor({ message: "只回覆兩個字：就緒", history: [], scenario: null, cfg });
+        send(res, 200, JSON.stringify({ ok: true, sample: sample.slice(0, 40) }), MIME[".json"]);
+      } catch (e) { send(res, 200, JSON.stringify({ ok: false, error: String(e.message || e) }), MIME[".json"]); }
+    });
+    return;
   }
 
   // SSE 串流：狀態一更新就立即推給瀏覽器（取代 100ms 輪詢，降延遲）
