@@ -299,6 +299,10 @@ namespace SpAdvisor
                         contacts.Append(']');
                     }
                 } catch {}
+                // 導引武器（飛彈/追蹤魚雷）目前導引的目標 → Web 畫綠色導引線
+                if (domain == "missile" || domain == "torpedo") {
+                    try { if (ob is WeaponBase wb) { var tg = wb.CurrentTarget; if (tg != null) contacts.Append(",\"tgt\":").Append(tg.UniqueID); } } catch {}
+                }
                 if (isOwn && !destroyed) AppendOwnDetail(contacts, ob);
                 contacts.Append('}');
                 count++;

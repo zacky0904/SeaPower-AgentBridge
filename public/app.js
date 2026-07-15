@@ -167,8 +167,10 @@ function drawLabels() {
     if (hit && c.id!==selectedId) continue;   // 選中必顯示，其餘重疊則略過
     drawn.push(rect);
     const col = c.destroyed?css("--c-destroyed"):relColor(c.relation);
-    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.strokeText(lbl, x, y);
+    ctx.save();                                    // 無白底：只用極淡陰影保可讀性
+    ctx.shadowColor="rgba(0,0,0,0.5)"; ctx.shadowBlur=2; ctx.shadowOffsetY=0.5;
     ctx.fillStyle = col; ctx.fillText(lbl, x, y);
+    ctx.restore();
   }
 }
 
@@ -226,8 +228,22 @@ function render() {
   const sel = state.scenario.contacts.find(c=>c.id===selectedId);
   if (sel && sel.own) drawWaypoints(sel);
   if (weaponRingUnit) drawWeaponRings(weaponRingUnit);   // 只在武器選單開啟時顯示射程環
+  drawGuidance();                                        // 導引武器 → 目標的綠線
   for (const c of state.scenario.contacts) drawSymbol(c);
   drawLabels();
+}
+
+// 導引武器（飛彈/追蹤魚雷）連到目標的綠色導引線（比照遊戲海圖）
+function drawGuidance(){
+  const byId=new Map(state.scenario.contacts.map(c=>[c.id,c]));
+  ctx.save(); ctx.strokeStyle="rgba(0,200,80,0.85)"; ctx.lineWidth=1.3;
+  for (const c of state.scenario.contacts){
+    if (c.tgt==null || (c.domain!=="missile" && c.domain!=="torpedo")) continue;
+    const t=byId.get(c.tgt); if(!t) continue;
+    const a=project(c.lat,c.lon), b=project(t.lat,t.lon);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // ── 假資料推算（mock 模式讓接觸移動）──────────────────────────
@@ -542,11 +558,12 @@ function weaponsFor(sel, target){
         action:()=>sendCmd({type:"attack",unit:sel.id,target:target.id,ammo:a.n,salvo:s}) })) };
   });
 }
-// 敵/未知接觸的完整右鍵選單：交戰武器 + 標記關係 + 要求識別（比照遊戲）
+// 敵/未知接觸的完整右鍵選單：交戰武器（需選己方）+ 標記關係/要求識別（免選單位）
 function contactMenu(sel, target){
-  const items = weaponsFor(sel, target).slice();
+  const items = sel ? weaponsFor(sel, target).slice()
+                    : [{label:"（左鍵選一個己方單位以交戰）"}];
   items.push({sep:true});
-  items.push({label:"⚑ 標記關係", sub:[
+  items.push({label:"⚑ 標記關係", sub:[      // 手動判定，不需選己方
     {label:"敵對", action:()=>sendCmd({type:"relation",target:target.id,value:"Hostile"})},
     {label:"中立", action:()=>sendCmd({type:"relation",target:target.id,value:"Neutral"})},
     {label:"友軍", action:()=>sendCmd({type:"relation",target:target.id,value:"Friendly"})},
@@ -554,8 +571,20 @@ function contactMenu(sel, target){
     {label:"清除標記", action:()=>sendCmd({type:"relation",target:target.id,value:"clear"})},
   ]});
   if (!target.identified)
-    items.push({label:"🔍 要求識別", action:()=>sendCmd({type:"identify",unit:sel.id,target:target.id})});
+    items.push({label:"🔍 要求識別", action:()=>orderIdentify(target)});
   return items;
+}
+function nearestOwn(target){
+  let best=null,bd=1e9;
+  for(const c of state.scenario.contacts){ if(!c.own||c.destroyed) continue;
+    const d=nm(c,target); if(d<bd){bd=d;best=c;} }
+  return best;
+}
+// 要求識別：用已選己方，否則自動派最近的己方單位（免先選單位）
+function orderIdentify(target){
+  const u=state.scenario.contacts.find(c=>c.id===selectedId && c.own) || nearestOwn(target);
+  if(!u){ logLine("沒有可派去識別的己方單位"); return; }
+  sendCmd({type:"identify",unit:u.id,target:target.id});
 }
 
 // ── 即時資料（SSE 串流，狀態一到就套用；輪詢為後備）─────────────
@@ -651,12 +680,12 @@ async function init() {
       showContextMenu(e.containerPoint.x, e.containerPoint.y, contactName(best), unitMenu(best));
       return;
     }
-    const sel = state.scenario.contacts.find(c=>c.id===selectedId);
-    if (!sel || !sel.own){ logLine("先左鍵選一個己方單位，再右鍵下令"); return; }
+    const sel = state.scenario.contacts.find(c=>c.id===selectedId && c.own);
     if (best && !best.own){                                                 // 敵/未知 → 交戰武器 + 標記/識別
-      weaponRingUnit = sel; scheduleRender();                                // 顯示開火單位的射程環
+      weaponRingUnit = sel || null; scheduleRender();                        // 有選己方才顯示射程環
       showContextMenu(e.containerPoint.x, e.containerPoint.y, contactName(best), contactMenu(sel, best));
       return; }
+    if (!sel){ logLine("先左鍵選一個己方單位，再右鍵移動"); return; }         // 空海移動才需選己方
     orderMove(sel.id, e.latlng, e.originalEvent && e.originalEvent.shiftKey); // 空海 → 移動 / Shift 加航點
   });
   document.addEventListener("click", ev=>{ if (!ev.target.closest("#ctxmenu")) hideContextMenu(); });
