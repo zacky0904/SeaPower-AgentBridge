@@ -350,7 +350,7 @@ function updateReadout() {
       if(sp.length) h+=roSec("感測")+roRow("裝備", sp.join("  ")); }
     if (d.aircraft && d.aircraft.length) h+=roSec("艦載機")+roRow("機隊", d.aircraft.map(a=>`${a.n}×${a.c}`).join("  "));
     if (d.ammo && d.ammo.length) { h+=roSec("彈藥")+`<div class="ro-ammo">`+
-      d.ammo.map(a=>`<div class="ro-am"><span class="ro-amn">${a.dn||a.n}</span>`+
+      d.ammo.map(a=>`<div class="ro-am"><span class="ro-amn">${catLabel(a)?`<span class="ro-cat">${catLabel(a)}</span> `:""}${a.dn||a.n}</span>`+
         `<span class="ro-amc">×${a.c}${a.rmax?` · ${a.rmin>0.5?Math.round(a.rmin)+"–":""}${Math.round(a.rmax)}nm`:""}</span></div>`).join("")+`</div>`; }
   }
   el.innerHTML=h+`</div>`;
@@ -454,6 +454,8 @@ function cmdDesc(o){ const u=o.unit; switch(o.type){
   case "sensor": return `單位 ${u} 感測 ${o.value} ${o.on?"開":"關"}`;
   case "attack": return `單位 ${u} 攻擊 ${o.target}${o.ammo?`（${o.ammo} ×${o.salvo||1}）`:""}`;
   case "select": return `遊戲鏡頭聚焦單位 ${u}`;
+  case "relation": return o.value==="clear" ? `清除 ${o.target} 關係標記` : `標記 ${o.target} 為 ${o.value}`;
+  case "identify": return `要求 ${u} 識別 ${o.target}`;
   default: return `指令 ${o.type}`; } }
 
 // 讓遊戲畫面切到對應目標（比照遊戲點選單位 → 鏡頭跟隨）
@@ -513,21 +515,47 @@ function unitMenu(c){
 // ── 下令（比照遊戲：右鍵敵方=選武器交戰、右鍵空海=移動）────────
 function orderMove(selId, latlng, append){
   sendCmd({type:"waypoint",unit:selId,replace:!append,points:[{lat:latlng.lat,lon:latlng.lng}]}); }
-// 右鍵敵方的武器選單（比照遊戲 EngageWith）：只列適用該目標的武器 + 齊射數
+// 武器類別（比照遊戲 Ammunition.Type）
+const CATLBL={missile:"飛彈",torpedo:"魚雷",gun:"艦砲",bomb:"炸彈",asroc:"反潛火箭",rocket:"火箭",
+  cluster:"集束彈",mlrs:"火箭炮",depthcharge:"深水炸彈",chaff:"干擾絲",noisemaker:"聲誘餌",
+  sonobuoy:"聲納浮標",fueltank:"副油箱",decoy:"誘餌",paratrooper:"傘兵",other:"其他"};
+const OFFENSIVE=new Set(["missile","torpedo","gun","bomb","asroc","rocket","cluster","mlrs","depthcharge"]);
+function catLabel(a){
+  let b=CATLBL[a.cat]||a.cat||"";
+  if(a.cat==="missile"){ if(a.tt==="aaw")b="防空飛彈"; else if(a.tt==="asuw")b="反艦飛彈"; else if(a.tt==="asw")b="反潛飛彈"; }
+  return b;
+}
+// 右鍵敵方的武器選單（比照遊戲 EngageWith）：只列「攻擊武器」中適用該目標的 + 齊射數
 function weaponsFor(sel, target){
   const ammo = (sel.detail && sel.detail.ammo) || [];
   const need = target.domain==="air" ? "aaw" : (target.domain==="subsurface" ? "asw" : "asuw");
   const dist = nm(sel, target);
-  const usable = ammo.filter(a => a.c>0 && (!a.tt || a.tt===need || a.tt2===need));
+  const usable = ammo.filter(a => a.c>0 && OFFENSIVE.has(a.cat||"")     // 只留攻擊武器（排除干擾/浮標/油箱…）
+    && (!a.tt || a.tt===need || a.tt2===need || a.cat==="gun"));
   if (!usable.length) return [{ label:"⚠ 無可用於此目標的武器" }];
   return usable.map(a=>{
     const inRange = a.rmax ? (dist>=(a.rmin||0) && dist<=a.rmax) : true;
     const rng = a.rmax ? `${a.rmin>0.5?Math.round(a.rmin)+"–":""}${Math.round(a.rmax)} nm` : "";
     const salvos = [1,2,4].filter(s=>s<=a.c);
-    return { label:`${inRange?"⌖":"⚠"} ${a.dn||a.n} ×${a.c}${rng?` · ${rng}`:""}`,
+    return { label:`${inRange?"⌖":"⚠"} [${catLabel(a)}] ${a.dn||a.n} ×${a.c}${rng?` · ${rng}`:""}`,
       sub: salvos.map(s=>({ label:`射 ${s} 發`,
         action:()=>sendCmd({type:"attack",unit:sel.id,target:target.id,ammo:a.n,salvo:s}) })) };
   });
+}
+// 敵/未知接觸的完整右鍵選單：交戰武器 + 標記關係 + 要求識別（比照遊戲）
+function contactMenu(sel, target){
+  const items = weaponsFor(sel, target).slice();
+  items.push({sep:true});
+  items.push({label:"⚑ 標記關係", sub:[
+    {label:"敵對", action:()=>sendCmd({type:"relation",target:target.id,value:"Hostile"})},
+    {label:"中立", action:()=>sendCmd({type:"relation",target:target.id,value:"Neutral"})},
+    {label:"友軍", action:()=>sendCmd({type:"relation",target:target.id,value:"Friendly"})},
+    {label:"未知", action:()=>sendCmd({type:"relation",target:target.id,value:"Unknown"})},
+    {label:"清除標記", action:()=>sendCmd({type:"relation",target:target.id,value:"clear"})},
+  ]});
+  if (!target.identified)
+    items.push({label:"🔍 要求識別", action:()=>sendCmd({type:"identify",unit:sel.id,target:target.id})});
+  return items;
 }
 
 // ── 即時資料（SSE 串流，狀態一到就套用；輪詢為後備）─────────────
@@ -625,9 +653,9 @@ async function init() {
     }
     const sel = state.scenario.contacts.find(c=>c.id===selectedId);
     if (!sel || !sel.own){ logLine("先左鍵選一個己方單位，再右鍵下令"); return; }
-    if (best && !best.own){                                                 // 敵方 → 選武器交戰（EngageWith）
+    if (best && !best.own){                                                 // 敵/未知 → 交戰武器 + 標記/識別
       weaponRingUnit = sel; scheduleRender();                                // 顯示開火單位的射程環
-      showContextMenu(e.containerPoint.x, e.containerPoint.y, `交戰 ${contactName(best)}`, weaponsFor(sel, best));
+      showContextMenu(e.containerPoint.x, e.containerPoint.y, contactName(best), contactMenu(sel, best));
       return; }
     orderMove(sel.id, e.latlng, e.originalEvent && e.originalEvent.shiftKey); // 空海 → 移動 / Shift 加航點
   });

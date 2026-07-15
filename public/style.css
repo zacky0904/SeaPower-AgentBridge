@@ -130,6 +130,7 @@ aside { background:var(--panel); display:flex; flex-direction:column; min-height
 .ro-ammo { display:flex; flex-direction:column; gap:1px; }
 .ro-am { display:flex; justify-content:space-between; gap:12px; font-size:12px; font-family:var(--font-mono); }
 .ro-amn { color:var(--ink); }
+.ro-cat { color:var(--accent); font-size:10px; background:var(--bg); border:1px solid var(--border); border-radius:3px; padding:0 4px; }
 .ro-amc { color:var(--ink-dim); white-space:nowrap; }
 #chart-hint {
   position:absolute; right:10px; bottom:8px; color:var(--ink-dim); font-size:11px;

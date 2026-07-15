@@ -111,6 +111,8 @@ namespace SpAdvisor
         // 主執行緒：實際下指令給遊戲（每個都驗證單位存在且為玩家可控）
         private void ExecuteCommand(PendingCmd cmd)
         {
+            // 標記接觸關係（操作對象是 target 接觸，不需要 ob 是玩家單位）
+            if (cmd.type == "relation") { SetRelation(cmd.target, cmd.value); return; }
             var ob = CoreService.FindByUID(cmd.unit);
             if (ob == null) { Logger.LogWarning($"指令 {cmd.type}: 找不到單位 {cmd.unit}"); return; }
             // 選取/聚焦：任何接觸都可（含敵方），讓遊戲鏡頭切到對應目標（比照遊戲 SelectUnitCommand）
@@ -144,6 +146,12 @@ namespace SpAdvisor
                         var task = new EngageTask(ammo, target, ob, salvo) { _ignoreIfUndetected = true };
                         ob.AddEngageTask(task);
                         Logger.LogInfo($"單位 {cmd.unit} 攻擊 {cmd.target}（{ammo} ×{salvo}）");
+                    }
+                    break;
+                case "identify":
+                    {
+                        var t = CoreService.FindByUID(cmd.target);
+                        if (t != null) { ob.setOrder(Order.Type.Identify, t, true); Logger.LogInfo($"單位 {cmd.unit} 要求識別 {cmd.target}"); }
                     }
                     break;
                 case "clearwp": ob.RemoveWaypoints(); Logger.LogInfo($"單位 {cmd.unit} 清除航點"); break;
@@ -475,6 +483,7 @@ namespace SpAdvisor
                                     string tt2 = am._ap._secondaryTargetType.ToString().ToLowerInvariant();
                                     if (tt2 != "unknown") sb.Append(",\"tt2\":").Append(JStr(tt2));
                                 }
+                                sb.Append(",\"cat\":").Append(JStr(AmmoCat(am._ap)));  // 武器類別（飛彈/魚雷/干擾…）
                             }
                         } catch {}
                         sb.Append('}');
@@ -516,6 +525,69 @@ namespace SpAdvisor
         }
 
         // 接觸被哪些感測器偵測 → 收斂成高階類別 JSON 陣列（目視/雷達/聲納/電磁/磁探）
+        // 標記接觸關係（比照遊戲手動判定敵/中立/友）；value="clear" 清除
+        private void SetRelation(int uid, string value)
+        {
+            var v = FindVehicleByUID(uid);
+            if (v == null) { Logger.LogWarning("relation: 找不到接觸 " + uid); return; }
+            if (value == "clear")
+            {
+                try
+                {
+                    var em = Unity.Entities.World.DefaultGameObjectInjectionWorld.EntityManager;
+                    if (em.Exists(v.Entity) && em.HasComponent<ForcedRelationState>(v.Entity))
+                        em.RemoveComponent<ForcedRelationState>(v.Entity);
+                    Logger.LogInfo($"清除接觸 {uid} 關係標記");
+                }
+                catch (Exception e) { Logger.LogWarning("relation clear 失敗: " + e.Message); }
+                return;
+            }
+            if (Enum.TryParse<RelationsState>(value, out var rs)) { v.OverrideRelationship(rs); Logger.LogInfo($"標記接觸 {uid} 為 {rs}"); }
+            else Logger.LogWarning("relation: 無效關係 " + value);
+        }
+
+        private Vehicle FindVehicleByUID(int uid)
+        {
+            if (!Singleton<TaskforceManager>.InstanceExists()) return null;
+            var tfm = Singleton<TaskforceManager>.Instance;
+            if (tfm == null || tfm._taskForces == null) return null;
+            foreach (var tf in tfm._taskForces)
+            {
+                if (tf == null || tf.Side != Taskforce.TfType.Player || tf.PlottingTable == null) continue;
+                foreach (var v in tf.PlottingTable.Vehicles)
+                    if (v != null && v.BaseObject != null && v.BaseObject.UniqueID == uid) return v;
+            }
+            return null;
+        }
+
+        // 依 Ammunition.Type/_subType 歸類武器（供 Web 顯示類別 + 過濾攻擊選單）
+        private static string AmmoCat(AmmunitionParameters ap)
+        {
+            var st = ap._subType;
+            if (st == Ammunition.Type.Sonobuoy) return "sonobuoy";
+            if (st == Ammunition.Type.Fueltank) return "fueltank";
+            if (st == Ammunition.Type.MOSS) return "decoy";
+            if (st == Ammunition.Type.AirDepthCharge) return "depthcharge";
+            if (st == Ammunition.Type.MLRS) return "mlrs";
+            switch (ap._type)
+            {
+                case Ammunition.Type.Missile: return "missile";
+                case Ammunition.Type.Torpedo: return "torpedo";
+                case Ammunition.Type.Projectile: return "gun";
+                case Ammunition.Type.Bomb: return "bomb";
+                case Ammunition.Type.RBU: return "asroc";
+                case Ammunition.Type.ASROC: return "asroc";
+                case Ammunition.Type.AerialRocket: return "rocket";
+                case Ammunition.Type.Cluster: return "cluster";
+                case Ammunition.Type.Chaff: return "chaff";
+                case Ammunition.Type.Noisemaker: return "noisemaker";
+                case Ammunition.Type.Sonobuoy: return "sonobuoy";
+                case Ammunition.Type.Fueltank: return "fueltank";
+                case Ammunition.Type.Paratrooper: return "paratrooper";
+                default: return "other";
+            }
+        }
+
         // 依感測器實體類別歸類偵測方式
         private static string SensorMethod(SensorSystem ss)
         {
