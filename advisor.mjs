@@ -233,24 +233,33 @@ const SYSTEM =
 - 交戰建議要具體：用哪個單位[編號]、哪種武器、是否在射程內、時機與風險。
 - 若剛下過命令（見最近玩家命令），據此接續建議、避免重複。`;
 
+// 統一發送：把網路層錯誤（fetch failed）的底層原因也帶出來，方便診斷
+async function apiFetch(url, opt, label) {
+  let res;
+  try {
+    res = await fetch(url, opt);
+  } catch (e) {
+    const c = (e && e.cause) || e;
+    const detail = [c && c.code, c && (c.message || c.reason), e && e.message].filter(Boolean).join(" ");
+    throw new Error(`${label} 連線失敗：${detail || "fetch failed"}（通常是沒網路／防火牆／需要代理／TLS 憑證問題）`);
+  }
+  if (!res.ok) throw new Error(`${label} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  return res.json();
+}
 async function callAnthropic(system, msgs, cfg) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const d = await apiFetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": cfg.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({ model: cfg.model, max_tokens: 1500, system, messages: msgs }),
-  });
-  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const d = await res.json();
+  }, "Anthropic");
   return (d.content && d.content[0] && d.content[0].text) || "（沒有回覆內容）";
 }
 async function callOpenAI(system, msgs, cfg) {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const d = await apiFetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Authorization": "Bearer " + cfg.apiKey, "content-type": "application/json" },
     body: JSON.stringify({ model: cfg.model, max_tokens: 1500, messages: [{ role: "system", content: system }, ...msgs] }),
-  });
-  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const d = await res.json();
+  }, "OpenAI");
   return (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "（沒有回覆內容）";
 }
 
