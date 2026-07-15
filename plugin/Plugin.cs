@@ -307,9 +307,81 @@ namespace SpAdvisor
               .Append("\"live\":true,")
               .Append("\"center\":{\"lat\":").Append(Num(cLat)).Append(",\"lon\":").Append(Num(cLon)).Append("},")
               .Append("\"land\":[],")
-              .Append("\"contacts\":[").Append(contacts).Append("]")
-              .Append('}');
+              .Append("\"contacts\":[").Append(contacts).Append("]");
+            AppendExtras(sb);   // 事件日誌 / 情報 / 目標 / 環境
+            sb.Append('}');
             return sb.ToString();
+        }
+
+        // 場景層級的明面資訊：環境、任務目標、情報/簡報、遊戲事件日誌
+        private void AppendExtras(StringBuilder sb)
+        {
+            // 環境（海況/雲量/日夜/任務日期時間）
+            try {
+                if (Singleton<SeaPower.Environment>.InstanceExists()) {
+                    var e = Singleton<SeaPower.Environment>.Instance;
+                    sb.Append(",\"env\":{\"seaState\":").Append(e.SeaState);
+                    if (!string.IsNullOrEmpty(e.CloudsCoverage)) sb.Append(",\"clouds\":").Append(JStr(e.CloudsCoverage));
+                    sb.Append(",\"daytime\":").Append(JStr(e.DayTimeSetting.ToString()));
+                    try { sb.Append(",\"datetime\":").Append(JStr(e.DateTime.ToString("yyyy-MM-dd HH:mm'Z'"))); } catch {}
+                    sb.Append('}');
+                }
+            } catch {}
+            // 任務目標 + 任務狀態
+            try {
+                if (Singleton<MissionManager>.InstanceExists()) {
+                    var mm = Singleton<MissionManager>.Instance;
+                    sb.Append(",\"missionStatus\":").Append(JStr(mm._missionStatus.ToString()));
+                    if (mm.Objectives != null) {
+                        sb.Append(",\"objectives\":[");
+                        bool o0 = true;
+                        foreach (var ob in mm.Objectives) {
+                            if (ob == null || ob.IsHidden) continue;   // 隱藏目標不給玩家看
+                            if (!o0) sb.Append(','); o0 = false;
+                            string st = ob._isCompleted ? "done" : ob._isFailed ? "failed" : ob._isCanceled ? "canceled" : "active";
+                            sb.Append("{\"text\":").Append(JStr(ob.Text ?? "")).Append(",\"status\":").Append(JStr(st))
+                              .Append(",\"main\":").Append(ob._isMain ? "true" : "false").Append('}');
+                        }
+                        sb.Append(']');
+                    }
+                }
+            } catch {}
+            // 情報 + 簡報 + 天氣預報
+            try {
+                if (Singleton<EventLog>.InstanceExists()) {
+                    var el = Singleton<EventLog>.Instance;
+                    if (el.MissionBriefing != null && !string.IsNullOrEmpty(el.MissionBriefing.Value))
+                        sb.Append(",\"briefing\":").Append(JStr(el.MissionBriefing.Value));
+                    if (!string.IsNullOrEmpty(el.Forecast)) sb.Append(",\"forecast\":").Append(JStr(el.Forecast));
+                    if (el.Intelligence != null) {
+                        sb.Append(",\"intel\":[");
+                        bool i0 = true; int ic = 0;
+                        foreach (var it in el.Intelligence) {
+                            if (it == null) continue; if (ic++ >= 40) break;
+                            if (!i0) sb.Append(','); i0 = false;
+                            sb.Append("{\"time\":").Append(JStr(it.TimeString ?? "")).Append(",\"text\":").Append(JStr(it.IntelligenceText ?? "")).Append('}');
+                        }
+                        sb.Append(']');
+                    }
+                }
+            } catch {}
+            // 遊戲事件日誌（RaiseAlert 的提示，最新在前）
+            try {
+                var mgvm = Globals._mainGameViewModel;
+                if (mgvm != null && mgvm.EventLog != null && mgvm.EventLog.Alerts != null) {
+                    sb.Append(",\"events\":[");
+                    bool a0 = true; int ac = 0;
+                    foreach (var al in mgvm.EventLog.Alerts) {
+                        if (al == null) continue; if (ac++ >= 40) break;
+                        string t = null; try { t = al.GetAlertText(); } catch {}
+                        if (string.IsNullOrEmpty(t)) continue;
+                        if (!a0) sb.Append(','); a0 = false;
+                        string ts = ""; try { ts = al.Time.ToString("HH:mm:ss"); } catch {}
+                        sb.Append("{\"time\":").Append(JStr(ts)).Append(",\"text\":").Append(JStr(t)).Append('}');
+                    }
+                    sb.Append(']');
+                }
+            } catch {}
         }
 
         private void Post(string json)

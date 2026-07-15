@@ -375,9 +375,64 @@ document.getElementById("day-night").onclick=e=>{
   e.target.textContent=document.body.classList.contains("night")?"☀ 日間":"☾ 夜間";
 };
 
-function logLine(t){ const f=document.getElementById("msglog");
-  const now=new Date().toLocaleTimeString();
-  f.innerHTML=`<span class="t">${now}</span> ${t}<br>`+f.innerHTML; }
+function esc(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+// ── 事件日誌（我方動作 + 遊戲事件合併，最新在前）──────────────
+let localLog = [];
+function logLine(t){ localLog.unshift({t:new Date().toLocaleTimeString(), x:t});
+  if (localLog.length>40) localLog.pop(); renderEvents(); }
+function renderEvents(){
+  const f=document.getElementById("msglog"); if(!f) return;
+  const ev=(state&&state.scenario.events)||[];
+  let h="";
+  for (const e of localLog) h+=`<div class="ev me"><span class="t">${e.t}</span> » ${esc(e.x)}</div>`;
+  for (const e of ev) h+=`<div class="ev"><span class="t">${esc(e.time)}</span> ${esc(e.text)}</div>`;
+  f.innerHTML=h;
+}
+
+// ── 環境列（頂欄）────────────────────────────────────────────
+function dayLabel(s){ return ({Day:"日間",Night:"夜間",Dawn:"拂曉",Dusk:"黃昏"})[s]||s||""; }
+function renderEnv(){
+  const el=document.getElementById("env"); const e=state&&state.scenario.env;
+  if(!e){ el.textContent=""; return; }
+  const p=[];
+  if(e.datetime) p.push(e.datetime);
+  if(e.daytime) p.push(dayLabel(e.daytime));
+  if(e.seaState!=null) p.push(`海況 ${e.seaState}`);
+  if(e.clouds) p.push(e.clouds);
+  el.textContent=p.join("  ·  ");
+}
+
+// ── 任務目標（左欄）──────────────────────────────────────────
+function msLabel(s){ return ({InProgress:"進行中",Victory:"勝利",Defeat:"失敗"})[s]||s; }
+function renderObjectives(){
+  const box=document.getElementById("objectives"); if(!box) return;
+  const objs=(state&&state.scenario.objectives)||[]; const ms=state&&state.scenario.missionStatus;
+  const icon=s=>s==="done"?"✔":s==="failed"?"✘":s==="canceled"?"–":"○";
+  let h="";
+  if(ms && ms!=="InProgress") h+=`<div class="obj-status ${ms==="Victory"?"win":"lose"}">${msLabel(ms)}</div>`;
+  if(!objs.length){ h+=`<div class="obj-empty">—</div>`; box.innerHTML=h; return; }
+  for(const o of objs) h+=`<div class="obj s-${o.status}"><span class="obj-i">${icon(o.status)}</span>`+
+    `<span class="obj-t ${o.main?"obj-main":""}">${esc(o.text)}</span></div>`;
+  box.innerHTML=h;
+}
+
+// ── 情報 / 簡報（右欄，可摺疊）───────────────────────────────
+function renderIntel(){
+  const box=document.getElementById("intel-box"); if(!box) return;
+  const intel=(state&&state.scenario.intel)||[]; const brief=state&&state.scenario.briefing;
+  const fc=state&&state.scenario.forecast;
+  if(!intel.length && !brief && !fc){ box.innerHTML=""; box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const wasCollapsed=box.classList.contains("collapsed");
+  let h=`<div class="ib-head">情報 / 簡報 <span class="ib-caret">${wasCollapsed?"▸":"▾"}</span></div><div class="ib-body">`;
+  if(brief) h+=`<div class="ib-brief">${esc(brief).replace(/\\n/g,"<br>")}</div>`;
+  if(fc) h+=`<div class="ib-item"><div class="ib-time">天氣預報</div>${esc(fc)}</div>`;
+  for(const it of intel) h+=`<div class="ib-item"><div class="ib-time">${esc(it.time)}</div>${esc(it.text)}</div>`;
+  h+=`</div>`;
+  box.innerHTML=h;
+  box.querySelector(".ib-head").onclick=()=>box.classList.toggle("collapsed");
+}
 
 // ── 航線規劃（Web → 遊戲）────────────────────────────────
 // 底部提示列（目前無模式，恆隱藏）
@@ -485,6 +540,10 @@ function applyState(d) {
     state.scenario.contacts = cs;
     if (d.scenario.name){ state.scenario.name=d.scenario.name;
       document.getElementById("mission-name").textContent=d.scenario.name; }
+    Object.assign(state.scenario, {env:d.scenario.env, objectives:d.scenario.objectives,
+      missionStatus:d.scenario.missionStatus, intel:d.scenario.intel, briefing:d.scenario.briefing,
+      forecast:d.scenario.forecast, events:d.scenario.events});
+    renderEnv(); renderObjectives(); renderIntel(); renderEvents();
     const newIds=new Set(cs.map(c=>c.id));
     let changed=oldIds.size!==newIds.size;
     if (!changed) for (const id of newIds) if (!oldIds.has(id)){ changed=true; break; }
@@ -498,6 +557,9 @@ function applyState(d) {
     live = false;
     if (hadData) logLine(d.live ? "任務單位已清空" : "與遊戲連線中斷");
     state.scenario.contacts = []; selectedId = null; hideContextMenu();
+    Object.assign(state.scenario, {env:null, objectives:null, missionStatus:null,
+      intel:null, briefing:null, forecast:null, events:null});
+    renderEnv(); renderObjectives(); renderIntel(); renderEvents();
     buildUnitList(); updateReadout(); updatePlanToolbar();
     document.getElementById("mission-name").textContent = "—";
     showWaiting(d.live ? "已連線 · 等待任務單位…" : "等待遊戲連線…（請開啟 Sea Power 並進入任務）");

@@ -13,6 +13,7 @@
     <header id="topbar">
       <div class="brand">SP&nbsp;ADVISOR</div>
       <div id="mission-name">—</div>
+      <div id="env" class="mono"></div>
       <div class="spacer"></div>
       <button id="day-night" class="chip" title="日/夜配色">☾ 夜間</button>
       <div id="clock" class="mono">T + 00:00:00</div>
@@ -21,6 +22,8 @@
     <div id="main">
       <!-- 左：單位/編隊清單 -->
       <aside id="left">
+        <div class="panel-title">任務目標</div>
+        <div id="objectives"></div>
         <div class="panel-title">單位 / 編隊</div>
         <ul id="unit-list"></ul>
       </aside>
@@ -39,6 +42,7 @@
       <!-- 右：聊天 -->
       <aside id="right">
         <div class="panel-title">戰術顧問</div>
+        <div id="intel-box" class="hidden"></div>
         <div id="chat-log"></div>
         <form id="chat-form">
           <textarea id="chat-input" rows="2" placeholder="跟顧問討論戰況…（Enter 送出 / Shift+Enter 換行）"></textarea>
