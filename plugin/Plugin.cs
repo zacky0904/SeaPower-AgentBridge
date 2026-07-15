@@ -191,6 +191,12 @@ namespace SpAdvisor
             int count = 0;
             double sumLat = 0, sumLon = 0; int own = 0;
 
+            // 剛生成的物件會被放在場景中心（GeoCenterPosition），之後才移到正確位置。
+            // 用它當「任務就緒」訊號：位在中心的物件先略過，全部就定位（無人在中心）才 ready。
+            bool hasCenter = false; double ccLat = 0, ccLon = 0; bool anyAtCenter = false;
+            const double CENTER_EPS = 0.003;   // ~0.3km
+            try { if (Singleton<SceneCreator>.InstanceExists()) { var gc = Singleton<SceneCreator>.Instance.GeoCenterPosition; ccLat = gc.Latitude; ccLon = gc.Longitude; hasCenter = true; } } catch {}
+
             // 反查：哪些己方單位的哪種感測器，正偵測到哪個目標（明面：來自你自己的感測器持有清單）
             var detMap = new Dictionary<int, List<string[]>>();
             try {
@@ -229,6 +235,9 @@ namespace SpAdvisor
                 if (pe.HasValue) { lat = pe.Value.Item1.Latitude; lon = pe.Value.Item1.Longitude; }
                 else if (v.Position != null) { var p = v.Position.Value; lat = p.Latitude; lon = p.Longitude; }
                 else continue;
+
+                // 還在場景中心 = 尚未就定位 → 略過並標記未就緒
+                if (hasCenter && Math.Abs(lat - ccLat) < CENTER_EPS && Math.Abs(lon - ccLon) < CENTER_EPS) { anyAtCenter = true; continue; }
 
                 string relation = MapRelation(v.CurrentRelationship());
                 string domain = MapDomain(mapType);
@@ -317,6 +326,7 @@ namespace SpAdvisor
             sb.Append('{')
               .Append("\"name\":\"SP Advisor — 即時戰況\",")
               .Append("\"live\":true,")
+              .Append("\"ready\":").Append((own > 0 && !anyAtCenter) ? "true" : "false").Append(",")
               .Append("\"center\":{\"lat\":").Append(Num(cLat)).Append(",\"lon\":").Append(Num(cLon)).Append("},")
               .Append("\"land\":[],")
               .Append("\"contacts\":[").Append(contacts).Append("]");

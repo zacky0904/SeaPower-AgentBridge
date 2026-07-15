@@ -354,7 +354,7 @@ function updateReadout() {
     if (d.order) h+=roRow("任務", d.order);
     const st=[]; if(d.nation)st.push(d.nation); st.push(d.emcon?"EMCON靜默":"輻射中");
     if(d.inFormation!=null)st.push(d.inFormation?(d.formationLeader?"編隊長":"編隊中"):"獨立");
-    if(d.disabled)st.push(`<span class="ro-warn">⚠失能</span>`);
+    if(d.disabled)st.push(`<span class="ro-warn">失能</span>`);
     h+=roRow("狀態", st.join(" · "));
     h+=roRow("航程/武器", `${d.unlimitedFuel?"∞":r(d.rangeKm)+" km"} · ${d.weaponStatus||"—"}`);
     if (d.engage) { h+=roSec("火力");
@@ -388,7 +388,7 @@ input.addEventListener("keydown", e=>{ if (e.key==="Enter"&&!e.shiftKey){ e.prev
 
 document.getElementById("day-night").onclick=e=>{
   document.body.classList.toggle("night");
-  e.target.textContent=document.body.classList.contains("night")?"☀ 日間":"☾ 夜間";
+  e.target.textContent=document.body.classList.contains("night")?"日間":"夜間";
 };
 
 function esc(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
@@ -424,7 +424,7 @@ function msLabel(s){ return ({InProgress:"進行中",Victory:"勝利",Defeat:"�
 function renderObjectives(){
   const box=document.getElementById("objectives"); if(!box) return;
   const objs=(state&&state.scenario.objectives)||[]; const ms=state&&state.scenario.missionStatus;
-  const icon=s=>s==="done"?"✔":s==="failed"?"✘":s==="canceled"?"–":"○";
+  const icon=s=>s==="done"?"●":s==="failed"?"×":s==="canceled"?"-":"○";
   let h="";
   if(ms && ms!=="InProgress") h+=`<div class="obj-status ${ms==="Victory"?"win":"lose"}">${msLabel(ms)}</div>`;
   if(!objs.length){ h+=`<div class="obj-empty">—</div>`; box.innerHTML=h; return; }
@@ -548,12 +548,12 @@ function weaponsFor(sel, target){
   const dist = nm(sel, target);
   const usable = ammo.filter(a => a.c>0 && OFFENSIVE.has(a.cat||"")     // 只留攻擊武器（排除干擾/浮標/油箱…）
     && (!a.tt || a.tt===need || a.tt2===need || a.cat==="gun"));
-  if (!usable.length) return [{ label:"⚠ 無可用於此目標的武器" }];
+  if (!usable.length) return [{ label:"無可用於此目標的武器" }];
   return usable.map(a=>{
     const inRange = a.rmax ? (dist>=(a.rmin||0) && dist<=a.rmax) : true;
-    const rng = a.rmax ? `${a.rmin>0.5?Math.round(a.rmin)+"–":""}${Math.round(a.rmax)} nm` : "";
+    const rng = a.rmax ? `${a.rmin>0.5?Math.round(a.rmin)+"-":""}${Math.round(a.rmax)} nm` : "";
     const salvos = [1,2,4].filter(s=>s<=a.c);
-    return { label:`${inRange?"⌖":"⚠"} [${catLabel(a)}] ${a.dn||a.n} ×${a.c}${rng?` · ${rng}`:""}`,
+    return { label:`[${catLabel(a)}] ${a.dn||a.n} x${a.c}${rng?` · ${rng}`:""}${inRange?"":"（越界）"}`,
       sub: salvos.map(s=>({ label:`射 ${s} 發`,
         action:()=>sendCmd({type:"attack",unit:sel.id,target:target.id,ammo:a.n,salvo:s}) })) };
   });
@@ -563,7 +563,7 @@ function contactMenu(sel, target){
   const items = sel ? weaponsFor(sel, target).slice()
                     : [{label:"（左鍵選一個己方單位以交戰）"}];
   items.push({sep:true});
-  items.push({label:"⚑ 標記關係", sub:[      // 手動判定，不需選己方
+  items.push({label:"標記關係", sub:[      // 手動判定，不需選己方
     {label:"敵對", action:()=>sendCmd({type:"relation",target:target.id,value:"Hostile"})},
     {label:"中立", action:()=>sendCmd({type:"relation",target:target.id,value:"Neutral"})},
     {label:"友軍", action:()=>sendCmd({type:"relation",target:target.id,value:"Friendly"})},
@@ -571,7 +571,7 @@ function contactMenu(sel, target){
     {label:"清除標記", action:()=>sendCmd({type:"relation",target:target.id,value:"clear"})},
   ]});
   if (!target.identified)
-    items.push({label:"🔍 要求識別", action:()=>orderIdentify(target)});
+    items.push({label:"要求識別", action:()=>orderIdentify(target)});
   return items;
 }
 function nearestOwn(target){
@@ -589,10 +589,11 @@ function orderIdentify(target){
 
 // ── 即時資料（SSE 串流，狀態一到就套用；輪詢為後備）─────────────
 let hadData = false;
+let fitted = false;          // 是否已做過初始取景（等物件全部就定位=ready 才做）
 function applyState(d) {
   const cs = (d.live && d.scenario && d.scenario.contacts) || [];
   if (cs.length) {                                   // 有任務單位 → 顯示
-    live = true; hideWaiting();
+    live = true;
     const oldIds=new Set(state.scenario.contacts.map(c=>c.id));
     state.scenario.contacts = cs;
     if (d.scenario.name){ state.scenario.name=d.scenario.name;
@@ -605,8 +606,14 @@ function applyState(d) {
     let changed=oldIds.size!==newIds.size;
     if (!changed) for (const id of newIds) if (!oldIds.has(id)){ changed=true; break; }
     if (changed) buildUnitList();
-    if (!hadData){ fitToContacts(); const own=cs.find(c=>c.own);
-      selectContact(own?own.id:cs[0].id); logLine(`已連上遊戲即時戰況（接觸 ${cs.length}）`); }
+    if (!hadData) logLine(`已連上遊戲即時戰況（接觸 ${cs.length}）`);
+    if (d.scenario.ready===false) {                  // 物件還在就定位 → 先不取景，避免被拉到中央又跳走
+      showWaiting("任務初始化中…（單位就定位中）");
+    } else {
+      hideWaiting();
+      if (!fitted){ fitToContacts(); const own=cs.find(c=>c.own);
+        selectContact(own?own.id:cs[0].id); fitted=true; }
+    }
     updateReadout();
     hadData = true;
     scheduleRender();
@@ -620,7 +627,7 @@ function applyState(d) {
     buildUnitList(); updateReadout(); updatePlanToolbar();
     document.getElementById("mission-name").textContent = "—";
     showWaiting(d.live ? "已連線 · 等待任務單位…" : "等待遊戲連線…（請開啟 Sea Power 並進入任務）");
-    hadData = false;
+    hadData = false; fitted = false;
     scheduleRender();
   }
 }
