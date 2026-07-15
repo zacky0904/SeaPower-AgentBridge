@@ -97,8 +97,8 @@ const server = createServer(async (req, res) => {
       const cfg = await loadConfig();
       if (!cfg.apiKey) return send(res, 200, JSON.stringify({ ok: false, error: "尚未設定金鑰" }), MIME[".json"]);
       try {
-        const sample = await askAdvisor({ message: "只回覆兩個字：就緒", history: [], scenario: null, cfg });
-        send(res, 200, JSON.stringify({ ok: true, sample: sample.slice(0, 40) }), MIME[".json"]);
+        const r = await askAdvisor({ message: "只回覆兩個字：就緒", history: [], scenario: null, cfg });
+        send(res, 200, JSON.stringify({ ok: true, sample: (r.reply || "").slice(0, 40) }), MIME[".json"]);
       } catch (e) { send(res, 200, JSON.stringify({ ok: false, error: String(e.message || e) }), MIME[".json"]); }
     });
     return;
@@ -182,8 +182,8 @@ const server = createServer(async (req, res) => {
       }
       const fresh = liveState && (Date.now() - liveAt < 8000);
       try {
-        const reply = await askAdvisor({ message, history: body.history, scenario: fresh ? liveState : null, cfg });
-        send(res, 200, JSON.stringify({ reply }), MIME[".json"]);
+        const r = await askAdvisor({ message, history: body.history, scenario: fresh ? liveState : null, cfg });
+        send(res, 200, JSON.stringify({ reply: r.reply, ...(body.debug ? { promptSent: r.prompt } : {}) }), MIME[".json"]);
       } catch (e) {
         console.error("[chat] 顧問失敗:", e.message || e);
         send(res, 200, JSON.stringify({ reply: "（顧問呼叫失敗）" + String(e.message || e) }), MIME[".json"]);

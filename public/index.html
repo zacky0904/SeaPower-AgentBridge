@@ -27,6 +27,7 @@
         <select id="aip-provider"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI</option></select></div>
       <div class="aip-row"><label>模型</label><input id="aip-model" type="text" placeholder="claude-sonnet-5" /></div>
       <div class="aip-row"><label>金鑰</label><span id="aip-key">—</span></div>
+      <div class="aip-row"><label>Debug</label><span class="aip-check"><input type="checkbox" id="aip-debug" /> 顯示每次送出的 prompt</span></div>
       <div class="aip-hint">金鑰請用環境變數（<span class="mono" id="aip-env">ANTHROPIC_API_KEY</span>）或 <span class="mono">advisor.config.json</span> 設定，不在此輸入以免外洩。</div>
       <div class="aip-btns"><button id="aip-save">儲存</button><button id="aip-test" class="pt-ghost">測試連線</button></div>
       <div id="aip-msg" class="aip-msg"></div>

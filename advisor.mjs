@@ -256,8 +256,9 @@ async function callOpenAI(system, msgs, cfg) {
 
 export async function askAdvisor({ message, history, scenario, cfg }) {
   const ctx = buildContext(scenario);
-  const msgs = (Array.isArray(history) ? history.slice(-6) : [])
+  const messages = (Array.isArray(history) ? history.slice(-6) : [])
     .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
     .concat([{ role: "user", content: `【壓縮戰況】\n${ctx}\n\n【我的問題】${message}` }]);
-  return cfg.provider === "openai" ? callOpenAI(SYSTEM, msgs, cfg) : callAnthropic(SYSTEM, msgs, cfg);
+  const reply = cfg.provider === "openai" ? await callOpenAI(SYSTEM, messages, cfg) : await callAnthropic(SYSTEM, messages, cfg);
+  return { reply, prompt: { provider: cfg.provider, model: cfg.model, system: SYSTEM, messages } };
 }

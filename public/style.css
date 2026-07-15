@@ -210,6 +210,13 @@ aside { background:var(--panel); display:flex; flex-direction:column; min-height
 .msg.bot  { align-self:flex-start; background:var(--panel-2); border:1px solid var(--border); }
 .msg.sys  { align-self:center; color:var(--ink-dim); font-size:11px; background:none; }
 .msg.pending { color:var(--ink-dim); font-style:italic; }
+.msg.dbg-prompt { align-self:stretch; max-width:100%; background:var(--panel-2); border:1px dashed var(--border); }
+.msg.dbg-prompt summary { cursor:pointer; color:var(--ink-dim); font-size:11px; }
+.msg.dbg-prompt summary:hover { color:var(--accent); }
+.msg.dbg-prompt pre { margin:6px 0 0; max-height:280px; overflow:auto; white-space:pre-wrap; word-break:break-word;
+  font-family:var(--font-mono); font-size:11px; color:var(--ink-dim); line-height:1.45; }
+.aip-check { color:var(--ink-dim); font-size:11px; display:flex; align-items:center; gap:6px; }
+.aip-check input { width:auto; }
 #chat-form { display:flex; gap:6px; padding:8px; border-top:1px solid var(--border); background:var(--panel-2); }
 #chat-input {
   flex:1; resize:none; background:var(--bg); color:var(--ink);

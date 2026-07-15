@@ -380,6 +380,19 @@ function addMsg(text, cls){ const d=document.createElement("div"); d.className="
   d.textContent=text; const log=document.getElementById("chat-log"); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
 const form=document.getElementById("chat-form"), input=document.getElementById("chat-input");
 let chatHistory=[];   // {role, content} 多輪對話
+let aiDebug=false;    // Debug 模式：顯示每次送出的 prompt
+function fmtPrompt(p){
+  let s=`供應商/模型：${p.provider} / ${p.model}\n\n===== SYSTEM =====\n${p.system}\n`;
+  for (const m of p.messages) s+=`\n===== ${(m.role||"").toUpperCase()} =====\n${m.content}\n`;
+  return s;
+}
+function showPromptDebug(p){
+  const d=document.createElement("details"); d.className="msg bot dbg-prompt";
+  const sum=document.createElement("summary"); sum.textContent=`查看送出的 prompt（${p.messages.length} 則訊息，${p.model}）`;
+  const pre=document.createElement("pre"); pre.textContent=fmtPrompt(p);
+  d.appendChild(sum); d.appendChild(pre);
+  const log=document.getElementById("chat-log"); log.appendChild(d); log.scrollTop=1e9;
+}
 form.addEventListener("submit", async e=>{
   e.preventDefault(); const msg=input.value.trim(); if (!msg) return;
   addMsg(msg,"user"); input.value="";
@@ -387,9 +400,10 @@ form.addEventListener("submit", async e=>{
   const hist=chatHistory.slice();
   try {
     const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({message:msg, history:hist})});
-    const reply=(await r.json()).reply||"（沒有回覆）";
+      body:JSON.stringify({message:msg, history:hist, debug:aiDebug})});
+    const j=await r.json(); const reply=j.reply||"（沒有回覆）";
     pending.classList.remove("pending"); pending.textContent=reply;
+    if (aiDebug && j.promptSent) showPromptDebug(j.promptSent);
     document.getElementById("chat-log").scrollTop=1e9;
     chatHistory.push({role:"user",content:msg},{role:"assistant",content:reply});
     if (chatHistory.length>12) chatHistory=chatHistory.slice(-12);
@@ -422,6 +436,7 @@ document.getElementById("ai-status").onclick=()=>{
   const p=document.getElementById("ai-panel"); p.classList.toggle("hidden");
   if(!p.classList.contains("hidden")){ pollAiStatus(); document.getElementById("aip-msg").textContent=""; }
 };
+document.getElementById("aip-debug").onchange=e=>{ aiDebug=e.target.checked; };
 document.getElementById("aip-provider").onchange=e=>{
   document.getElementById("aip-env").textContent=e.target.value==="openai"?"OPENAI_API_KEY":"ANTHROPIC_API_KEY";
   document.getElementById("aip-model").placeholder=e.target.value==="openai"?"gpt-4o":"claude-sonnet-5";
