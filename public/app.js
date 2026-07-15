@@ -377,15 +377,25 @@ function updateReadout() {
 
 // ── 聊天 ────────────────────────────────────────────────────
 function addMsg(text, cls){ const d=document.createElement("div"); d.className="msg "+cls;
-  d.textContent=text; const log=document.getElementById("chat-log"); log.appendChild(d); log.scrollTop=log.scrollHeight; }
+  d.textContent=text; const log=document.getElementById("chat-log"); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
 const form=document.getElementById("chat-form"), input=document.getElementById("chat-input");
+let chatHistory=[];   // {role, content} 多輪對話
 form.addEventListener("submit", async e=>{
   e.preventDefault(); const msg=input.value.trim(); if (!msg) return;
   addMsg(msg,"user"); input.value="";
+  const pending=addMsg("分析中…","bot pending");
+  const hist=chatHistory.slice();
   try {
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:msg})});
-    addMsg((await r.json()).reply,"bot");
-  } catch { addMsg("（連線失敗，伺服器沒開？）","sys"); }
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({message:msg, history:hist})});
+    const reply=(await r.json()).reply||"（沒有回覆）";
+    pending.classList.remove("pending"); pending.textContent=reply;
+    document.getElementById("chat-log").scrollTop=1e9;
+    chatHistory.push({role:"user",content:msg},{role:"assistant",content:reply});
+    if (chatHistory.length>12) chatHistory=chatHistory.slice(-12);
+  } catch {
+    pending.classList.remove("pending"); pending.classList.add("sys"); pending.textContent="（連線失敗，伺服器沒開？）";
+  }
 });
 input.addEventListener("keydown", e=>{ if (e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); form.requestSubmit(); } });
 
@@ -711,7 +721,7 @@ async function init() {
   document.getElementById("mission-name").textContent = "—";
   buildUnitList();
   showWaiting("等待遊戲連線…（請開啟 Sea Power 並進入任務）");
-  addMsg("戰術顧問待命。開啟遊戲任務後，海圖會顯示即時戰況；聊天引擎將於下一階段接上。","sys");
+  addMsg("戰術顧問已就緒。開啟任務後可直接問我戰況分析、交戰建議、威脅評估等。（需先設定 Anthropic API 金鑰——見 README）","sys");
 
   setInterval(updateClock, 1000); updateClock();
   startLiveFeed();

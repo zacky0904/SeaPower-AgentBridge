@@ -177,6 +177,7 @@ aside { background:var(--panel); display:flex; flex-direction:column; min-height
 .msg.user { align-self:flex-end; background:#12303f; border:1px solid #1d4257; }
 .msg.bot  { align-self:flex-start; background:var(--panel-2); border:1px solid var(--border); }
 .msg.sys  { align-self:center; color:var(--ink-dim); font-size:11px; background:none; }
+.msg.pending { color:var(--ink-dim); font-style:italic; }
 #chat-form { display:flex; gap:6px; padding:8px; border-top:1px solid var(--border); background:var(--panel-2); }
 #chat-input {
   flex:1; resize:none; background:var(--bg); color:var(--ink);

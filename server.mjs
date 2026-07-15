@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, extname, normalize } from "node:path";
+import { loadConfig, askAdvisor } from "./advisor.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "public");
@@ -131,13 +132,27 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/api/chat" && req.method === "POST") {
     let raw = "";
     req.on("data", (c) => (raw += c));
-    req.on("end", () => {
-      let msg = "";
-      try { msg = JSON.parse(raw).message || ""; } catch {}
-      const reply =
-        "（LLM 尚未接上）我已收到你的訊息：「" + msg + "」。\n" +
-        "第二階段會把戰況快照 + 你的問題送給分析引擎，這裡就會回真正的戰術建議。";
-      send(res, 200, JSON.stringify({ reply }), MIME[".json"]);
+    req.on("end", async () => {
+      let body = {};
+      try { body = JSON.parse(raw); } catch {}
+      const message = (body.message || "").toString();
+      const cfg = await loadConfig();   // 每次讀，讓使用者不用重開就能填金鑰
+      if (!cfg.apiKey) {
+        return send(res, 200, JSON.stringify({ reply:
+          "尚未設定 Anthropic API 金鑰，顧問無法分析。請擇一設定：\n" +
+          "1) 設環境變數 ANTHROPIC_API_KEY（設好重開伺服器），或\n" +
+          "2) 在 sp-advisor 資料夾建立 advisor.config.json：\n" +
+          '   {"apiKey":"sk-ant-...","model":"claude-sonnet-5"}\n' +
+          "（金鑰只存在你本機、已被 .gitignore 排除、不會上傳。）" }), MIME[".json"]);
+      }
+      const fresh = liveState && (Date.now() - liveAt < 8000);
+      try {
+        const reply = await askAdvisor({ message, history: body.history, scenario: fresh ? liveState : null, cfg });
+        send(res, 200, JSON.stringify({ reply }), MIME[".json"]);
+      } catch (e) {
+        console.error("[chat] 顧問失敗:", e.message || e);
+        send(res, 200, JSON.stringify({ reply: "（顧問呼叫失敗）" + String(e.message || e) }), MIME[".json"]);
+      }
     });
     return;
   }

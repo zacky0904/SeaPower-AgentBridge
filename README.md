@@ -2,7 +2,7 @@
 
 給 [Sea Power: Naval Combat in the Missile Age](https://store.steampowered.com/app/1286220/)（Triassic Games）用的**戰術輔助 / 顧問工具**。
 
-在瀏覽器裡開一張**即時戰術海圖**，顯示玩家在遊戲中已知的接觸畫面（單位、敵我識別、偵測方式、武器/感測/彈藥等明面資訊），並可**從網頁規劃航線下指令回遊戲**。之後會加上 AI 戰況分析（聊天視窗）。
+在瀏覽器裡開一張**即時戰術海圖**，顯示玩家在遊戲中已知的接觸畫面（單位、敵我識別、偵測方式、武器/感測/彈藥等明面資訊），可**從網頁下指令回遊戲**（移動、交戰、感測、標記/識別…），並有一個接 Claude 的 **AI 戰術顧問**（右側聊天視窗）根據當下明面戰況給建議。
 
 > ⚠️ 這是非官方社群工具，只讀取/使用玩家在遊戲中本來就看得到的資訊。
 
@@ -48,6 +48,20 @@
 3. `node server.mjs`（或雙擊 `啟動 SP Advisor.cmd`）→ 開遊戲進任務。
 
 > plugin 的 `.csproj` 以相對路徑自動找到遊戲 DLL，不管 Steam 裝在哪台哪個磁碟都行。若專案放在遊戲目錄外，設環境變數 `SeaPowerDir` 指向遊戲安裝資料夾即可。
+
+## AI 顧問（設定 API 金鑰）
+
+右側聊天視窗會把**當下的明面戰況摘要**（任務/環境/目標/己方單位與武器/接觸方位距離/情報/事件）加上你的問題送給 Claude，回你戰術建議。顧問只依據明面資料、不臆測未知資訊。
+
+需要你自己的 [Anthropic API 金鑰](https://console.anthropic.com/)，擇一設定（**金鑰只存在你本機，已被 `.gitignore` 排除，不會上傳**）：
+
+1. **環境變數**：設 `ANTHROPIC_API_KEY`（可再設 `SP_ADVISOR_MODEL`，預設 `claude-sonnet-5`），重開伺服器。
+2. **設定檔**：把 `advisor.config.example.json` 複製成 `advisor.config.json`，填入金鑰：
+   ```json
+   { "apiKey": "sk-ant-...", "model": "claude-sonnet-5" }
+   ```
+
+金鑰在**伺服器端**使用，不會傳到瀏覽器。設定檔可即時生效（不必重開伺服器）。
 
 ## 地圖資料
 

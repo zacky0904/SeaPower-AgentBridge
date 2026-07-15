@@ -12,3 +12,6 @@ public/vendor/land-50m.geojson
 # 系統
 Thumbs.db
 .DS_Store
+
+# AI 顧問金鑰（本機，勿上傳）
+advisor.config.json
