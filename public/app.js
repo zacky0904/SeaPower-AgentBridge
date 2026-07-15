@@ -9,6 +9,7 @@ let startWall = Date.now();
 let live = false;          // true = 遊戲即時資料（停用本地推算）
 let collapsedGroups = new Set();  // 記住被摺疊的 Fleet 資料夾
 let planning = null;              // 航線規劃中：{unit, points:[{lat,lon}]}
+let attacking = null;             // 攻擊目標選定中：{unit, target}
 let map = null;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -198,6 +199,7 @@ function render() {
   for (const c of state.scenario.contacts) drawSymbol(c);
   drawLabels();
   drawPlanning();
+  drawAttack();
 }
 
 // ── 假資料推算（mock 模式讓接觸移動）──────────────────────────
@@ -354,13 +356,57 @@ function updatePlanToolbar() {
       `<button id="pt-confirm">確認送出</button><button id="pt-cancel" class="pt-ghost">取消</button>`;
     tb.querySelector("#pt-confirm").onclick=confirmPlan;
     tb.querySelector("#pt-cancel").onclick=cancelPlan;
+  } else if (attacking) {
+    tb.className="";
+    const tgt = attacking.target!=null ? state.scenario.contacts.find(c=>c.id===attacking.target) : null;
+    if (tgt) {
+      tb.innerHTML=`<span class="pt-hint">攻擊 ${contactName(tgt)}？</span>`+
+        `<button id="pt-atkgo" class="pt-danger">⌖ 確認攻擊</button><button id="pt-cancel" class="pt-ghost">取消</button>`;
+      tb.querySelector("#pt-atkgo").onclick=confirmAttack;
+    } else {
+      tb.innerHTML=`<span class="pt-hint">點選要攻擊的目標…</span><button id="pt-cancel" class="pt-ghost">取消</button>`;
+    }
+    tb.querySelector("#pt-cancel").onclick=cancelAttack;
   } else if (sel && sel.own) {
     tb.className="";
-    tb.innerHTML=`<button id="pt-start">▸ 規劃 ${contactNo(sel).trim()} 航線</button>`;
+    tb.innerHTML=`<button id="pt-start">▸ 規劃 ${contactNo(sel).trim()} 航線</button>`+
+      `<button id="pt-atk" class="pt-ghost">⌖ 攻擊目標</button>`;
     tb.querySelector("#pt-start").onclick=()=>{ planning={unit:sel.id,points:[]}; updatePlanToolbar(); scheduleRender(); };
+    tb.querySelector("#pt-atk").onclick=()=>{ attacking={unit:sel.id,target:null}; updatePlanToolbar(); scheduleRender(); };
   } else {
     tb.className="hidden";
   }
+}
+
+// ── 攻擊目標 ────────────────────────────────────────────
+function setAttackTarget(id){ if(!attacking) return;
+  const c=state.scenario.contacts.find(x=>x.id===id); if(!c||c.own) return;
+  attacking.target=id; updatePlanToolbar(); scheduleRender(); }
+async function confirmAttack(){
+  if(!attacking || attacking.target==null) return;
+  const unit=attacking.unit, target=attacking.target;
+  try{
+    await fetch("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({type:"attack",unit,target})});
+    logLine(`已下攻擊令：單位 ${unit} → 目標 ${target}`);
+  }catch{ logLine("攻擊指令送出失敗（伺服器？）"); }
+  attacking=null; updatePlanToolbar(); scheduleRender();
+}
+function cancelAttack(){ attacking=null; updatePlanToolbar(); scheduleRender(); }
+function drawAttack(){
+  if(!attacking || attacking.target==null) return;
+  const u=state.scenario.contacts.find(c=>c.id===attacking.unit);
+  const t=state.scenario.contacts.find(c=>c.id===attacking.target);
+  if(!u||!t) return;
+  const a=project(u.lat,u.lon), b=project(t.lat,t.lon);
+  ctx.save();
+  ctx.strokeStyle="#ff3b30"; ctx.lineWidth=2; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]);
+  ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(b.x,b.y,12,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(b.x-16,b.y); ctx.lineTo(b.x+16,b.y);
+  ctx.moveTo(b.x,b.y-16); ctx.lineTo(b.x,b.y+16); ctx.stroke();
+  ctx.restore();
 }
 function addPlanPoint(latlng){ if(!planning) return;
   planning.points.push({lat:latlng.lat,lon:latlng.lng}); updatePlanToolbar(); scheduleRender(); }
@@ -416,7 +462,7 @@ async function pollLive() {
   } else {                                           // 無任務 → 空著
     live = false;
     if (hadData) logLine(d.live ? "任務單位已清空" : "與遊戲連線中斷");
-    state.scenario.contacts = []; selectedId = null; planning = null;
+    state.scenario.contacts = []; selectedId = null; planning = null; attacking = null;
     buildUnitList(); updateReadout(); updatePlanToolbar();
     document.getElementById("mission-name").textContent = "—";
     showWaiting(d.live ? "已連線 · 等待任務單位…" : "等待遊戲連線…（請開啟 Sea Power 並進入任務）");
@@ -449,13 +495,14 @@ async function init() {
   map.on("click", e=>{
     if (planning){ addPlanPoint(e.latlng); return; }   // 規劃中 → 點圖加航點
     if (!state) return;
-    let best=null, bestD=18;                            // 否則 → 點選最近接觸
+    let best=null, bestD=18;
     for (const c of state.scenario.contacts){ const p=project(c.lat,c.lon);
       const d=Math.hypot(p.x-e.containerPoint.x,p.y-e.containerPoint.y); if (d<bestD){bestD=d;best=c;} }
+    if (attacking){ if (best && !best.own) setAttackTarget(best.id); return; } // 攻擊模式 → 選目標
     if (best){ selectContact(best.id); buildUnitList(); }
   });
   window.addEventListener("keydown", e=>{
-    if (e.key==="Escape" && planning){ cancelPlan(); return; }
+    if (e.key==="Escape"){ if(planning){cancelPlan();return;} if(attacking){cancelAttack();return;} }
     if ((e.key==="f"||e.key==="F") && document.activeElement!==input) fitToContacts();
   });
 

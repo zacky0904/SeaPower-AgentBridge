@@ -95,6 +95,11 @@ namespace SpAdvisor
                             foreach (var p in pts.EnumerateArray())
                                 cmd.points.Add(new[] { p.GetProperty("lat").GetDouble(), p.GetProperty("lon").GetDouble() });
                     }
+                    else if (cmd.type == "attack")
+                    {
+                        if (el.TryGetProperty("target", out var t)) cmd.target = t.GetInt32();
+                        if (el.TryGetProperty("salvo", out var s)) cmd.salvo = s.GetInt32();
+                    }
                     _cmdQueue.Enqueue(cmd);
                 }
             }
@@ -120,6 +125,22 @@ namespace SpAdvisor
                         added++;
                     }
                 Logger.LogInfo($"已為單位 {cmd.unit} 設定 {added} 個航點");
+            }
+            else if (cmd.type == "attack")
+            {
+                var unit = CoreService.FindByUID(cmd.unit);
+                if (unit == null || !unit.IsPlayerObject) { Logger.LogWarning("attack: 找不到可控單位 " + cmd.unit); return; }
+                var target = CoreService.FindByUID(cmd.target);
+                if (target == null) { Logger.LogWarning("attack: 找不到目標 " + cmd.target); return; }
+                // 武器自動選（跟遊戲右鍵攻擊同一套邏輯）
+                string ammo = unit.GetDefaultAmmunitionForEngage(target);
+                if (string.IsNullOrEmpty(ammo) || unit.getAmmunitionAmountByName(ammo) <= 0)
+                { Logger.LogInfo($"單位 {cmd.unit} 對 {cmd.target} 無可用武器"); return; }
+                int salvo = cmd.salvo > 0 ? cmd.salvo : 1;
+                var task = new EngageTask(ammo, target, unit, salvo);
+                task._ignoreIfUndetected = true;   // 只打偵測到的目標（維持公平）
+                unit.AddEngageTask(task);
+                Logger.LogInfo($"單位 {cmd.unit} 攻擊 {cmd.target}（{ammo} ×{salvo}）");
             }
         }
 
@@ -444,5 +465,7 @@ namespace SpAdvisor
         public int unit;
         public bool replace;
         public List<double[]> points;
+        public int target;
+        public int salvo;
     }
 }

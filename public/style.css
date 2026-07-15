@@ -148,6 +148,7 @@ aside { background:var(--panel); display:flex; flex-direction:column; min-height
   padding:4px 10px; font-weight:700; cursor:pointer; font-family:inherit;
 }
 #plan-toolbar button.pt-ghost { background:var(--panel); color:var(--ink); border:1px solid var(--border); }
+#plan-toolbar button.pt-danger { background:var(--c-hostile); color:#fff; }
 #plan-toolbar button:hover { filter:brightness(1.1); }
 
 /* 聊天 */
