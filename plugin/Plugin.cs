@@ -28,6 +28,7 @@ namespace SpAdvisor
         private bool _polling;
         private int _lastCount = -1;
         private static readonly ConcurrentQueue<PendingCmd> _cmdQueue = new ConcurrentQueue<PendingCmd>();
+        private static readonly Dictionary<int, double[]> _motionCache = new Dictionary<int, double[]>(); // 敵方接觸暫停前的航向/航速
 
         private void Awake()
         {
@@ -196,6 +197,7 @@ namespace SpAdvisor
             bool hasCenter = false; double ccLat = 0, ccLon = 0; bool anyAtCenter = false;
             const double CENTER_EPS = 0.003;   // ~0.3km
             try { if (Singleton<SceneCreator>.InstanceExists()) { var gc = Singleton<SceneCreator>.Instance.GeoCenterPosition; ccLat = gc.Latitude; ccLon = gc.Longitude; hasCenter = true; } } catch {}
+            bool paused = false; try { paused = GameTime.IsPaused(); } catch {}   // 暫停時物理速度歸零，敵方航速改用快取
 
             // 反查：哪些己方單位的哪種感測器，正偵測到哪個目標（明面：來自你自己的感測器持有清單）
             var detMap = new Dictionary<int, List<string[]>>();
@@ -270,12 +272,22 @@ namespace SpAdvisor
                     else if (v.Altitude.HasValue) alt = v.Altitude.Value.Value.Estimate;
                 } catch {}
 
-                // 從 Unity 速度向量算航向(度,北為0)與航速(節)
-                var vel = v.UnityVelocityVector;
-                double h = Math.Sqrt(vel.x * vel.x + vel.z * vel.z);
-                double speedKn = h * 1.9438445;
-                double course = 0;
-                if (h > 0.05) { course = Math.Atan2(vel.x, vel.z) * 180.0 / Math.PI; if (course < 0) course += 360; }
+                // 航向(度,北為0)與航速(節)——暫停時物理速度會歸零，須避開
+                double speedKn, course;
+                if (isOwn) {
+                    // 己方：用單位實際航向/航速（節），暫停不歸零、低速也有航向
+                    try { course = ((ob.Heading.Value % 360) + 360) % 360; speedKn = Math.Abs(ob.Velocity.Value); }
+                    catch { var vv = v.UnityVelocityVector; double hh = Math.Sqrt(vv.x * vv.x + vv.z * vv.z);
+                        speedKn = hh * 1.9438445; course = hh > 0.05 ? (Math.Atan2(vv.x, vv.z) * 180.0 / Math.PI + 360) % 360 : 0; }
+                } else {
+                    // 敵/未知：用航跡估計（明面）；暫停時物理速度歸零 → 用暫停前的快取
+                    var vel = v.UnityVelocityVector;
+                    double h = Math.Sqrt(vel.x * vel.x + vel.z * vel.z);
+                    speedKn = h * 1.9438445;
+                    course = h > 0.05 ? (Math.Atan2(vel.x, vel.z) * 180.0 / Math.PI + 360) % 360 : 0;
+                    if (paused && _motionCache.TryGetValue(ob.UniqueID, out var m)) { course = m[0]; speedKn = m[1]; }
+                    else if (!paused) _motionCache[ob.UniqueID] = new[] { course, speedKn };
+                }
 
                 if (count > 0) contacts.Append(',');
                 contacts.Append('{')
