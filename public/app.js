@@ -8,7 +8,6 @@ let selectedId = null;
 let startWall = Date.now();
 let live = false;          // true = 遊戲即時資料（停用本地推算）
 let collapsedGroups = new Set();  // 記住被摺疊的 Fleet 資料夾
-let planning = null;              // 航線規劃中：{unit, points:[{lat,lon}]}
 let attacking = null;             // 攻擊目標選定中：{unit, target}
 let map = null;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -198,8 +197,6 @@ function render() {
   if (sel && sel.own) { drawWeaponRings(sel); drawWaypoints(sel); }
   for (const c of state.scenario.contacts) drawSymbol(c);
   drawLabels();
-  drawPlanning();
-  drawAttack();
 }
 
 // ── 假資料推算（mock 模式讓接觸移動）──────────────────────────
@@ -347,96 +344,93 @@ function logLine(t){ const f=document.getElementById("msglog");
   f.innerHTML=`<span class="t">${now}</span> ${t}<br>`+f.innerHTML; }
 
 // ── 航線規劃（Web → 遊戲）────────────────────────────────
+// 底部提示列：只在攻擊選標時顯示
 function updatePlanToolbar() {
   const tb=document.getElementById("plan-toolbar");
-  const sel=state && state.scenario.contacts.find(c=>c.id===selectedId);
-  if (planning) {
+  if (attacking) {
     tb.className="";
-    tb.innerHTML=`<span class="pt-hint">點海圖加航點 · 已 ${planning.points.length} 點</span>`+
-      `<button id="pt-confirm">確認送出</button><button id="pt-cancel" class="pt-ghost">取消</button>`;
-    tb.querySelector("#pt-confirm").onclick=confirmPlan;
-    tb.querySelector("#pt-cancel").onclick=cancelPlan;
-  } else if (attacking) {
-    tb.className="";
-    const tgt = attacking.target!=null ? state.scenario.contacts.find(c=>c.id===attacking.target) : null;
-    if (tgt) {
-      tb.innerHTML=`<span class="pt-hint">攻擊 ${contactName(tgt)}？</span>`+
-        `<button id="pt-atkgo" class="pt-danger">⌖ 確認攻擊</button><button id="pt-cancel" class="pt-ghost">取消</button>`;
-      tb.querySelector("#pt-atkgo").onclick=confirmAttack;
-    } else {
-      tb.innerHTML=`<span class="pt-hint">點選要攻擊的目標…</span><button id="pt-cancel" class="pt-ghost">取消</button>`;
-    }
+    tb.innerHTML=`<span class="pt-hint">點選要攻擊的目標…（ESC 取消）</span><button id="pt-cancel" class="pt-ghost">取消</button>`;
     tb.querySelector("#pt-cancel").onclick=cancelAttack;
-  } else if (sel && sel.own) {
-    tb.className="";
-    tb.innerHTML=`<button id="pt-start">▸ 規劃 ${contactNo(sel).trim()} 航線</button>`+
-      `<button id="pt-atk" class="pt-ghost">⌖ 攻擊目標</button>`;
-    tb.querySelector("#pt-start").onclick=()=>{ planning={unit:sel.id,points:[]}; updatePlanToolbar(); scheduleRender(); };
-    tb.querySelector("#pt-atk").onclick=()=>{ attacking={unit:sel.id,target:null}; updatePlanToolbar(); scheduleRender(); };
-  } else {
-    tb.className="hidden";
+  } else { tb.className="hidden"; }
+}
+
+// ── 指令傳送（即時，無需批次送出）──────────────────────────
+async function sendCmd(o){
+  try{ await fetch("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)});
+    logLine(cmdDesc(o)); }catch{ logLine("指令送出失敗（伺服器？）"); }
+}
+function cmdDesc(o){ const u=o.unit; switch(o.type){
+  case "waypoint": return `單位 ${u} 加航點`;
+  case "clearwp": return `單位 ${u} 清除航點`;
+  case "resume": return `單位 ${u} 恢復航向`;
+  case "emcon": return `單位 ${u} EMCON ${o.on?"靜默":"輻射"}`;
+  case "speed": return `單位 ${u} 航速 ${o.num} kn`;
+  case "altitude": return `單位 ${u} 高度 ${o.num} ft`;
+  case "weaponstatus": return `單位 ${u} 武器 ${o.value}`;
+  case "sensor": return `單位 ${u} 感測 ${o.value} ${o.on?"開":"關"}`;
+  case "attack": return `單位 ${u} 攻擊 ${o.target}`;
+  default: return `指令 ${o.type}`; } }
+
+// ── 右鍵情境選單 ────────────────────────────────────────
+function buildMenu(items, container){
+  for(const it of items){
+    if(it.sep){ const s=document.createElement("div"); s.className="ctx-sep"; container.appendChild(s); continue; }
+    const el=document.createElement("div"); el.className="ctx-item"+(it.danger?" danger":"");
+    const lab=document.createElement("span"); lab.textContent=it.label; el.appendChild(lab);
+    if(it.sub){ el.classList.add("has-sub");
+      const c=document.createElement("span"); c.className="ctx-caret"; c.textContent="▸"; el.appendChild(c);
+      const sub=document.createElement("div"); sub.className="ctx-sub"; buildMenu(it.sub, sub); el.appendChild(sub);
+    } else if(it.action){ el.onclick=(ev)=>{ ev.stopPropagation(); hideContextMenu(); it.action(); }; }
+    container.appendChild(el);
   }
 }
+function showContextMenu(x,y,title,items){
+  const m=document.getElementById("ctxmenu"); m.innerHTML="";
+  if(title){ const h=document.createElement("div"); h.className="ctx-hd"; h.textContent=title; m.appendChild(h); }
+  buildMenu(items, m); m.className=""; m.style.left="0px"; m.style.top="0px";
+  const r=m.getBoundingClientRect(), w=document.getElementById("chart-wrap").getBoundingClientRect();
+  let px=x, py=y;
+  if(px+r.width>w.width) px=Math.max(4,x-r.width);
+  if(py+r.height>w.height) py=Math.max(4,w.height-r.height-4);
+  m.style.left=px+"px"; m.style.top=py+"px";
+}
+function hideContextMenu(){ document.getElementById("ctxmenu").className="hidden"; }
+
+// 己方單位的右鍵選單（比照遊戲）
+function unitMenu(c){
+  const u=c.id, d=c.detail||{};
+  const nav=[
+    {label:"改變航速", sub:[0,5,10,15,20,25,30].map(s=>({label:s===0?"停俥":s+" kn",action:()=>sendCmd({type:"speed",unit:u,num:s})}))},
+    {label:"清除航點", action:()=>sendCmd({type:"clearwp",unit:u})},
+    {label:"恢復航向", action:()=>sendCmd({type:"resume",unit:u})},
+  ];
+  if(c.domain==="air") nav.push({label:"設定高度", sub:[500,1000,5000,10000,20000,30000].map(a=>({label:a+" ft",action:()=>sendCmd({type:"altitude",unit:u,num:a})}))});
+  const sensorSub=(v)=>[{label:"開",action:()=>sendCmd({type:"sensor",unit:u,value:v,on:true})},{label:"關",action:()=>sendCmd({type:"sensor",unit:u,value:v,on:false})}];
+  return [
+    {label:"⌖ 交戰目標…", danger:true, action:()=>startAttack(u)},
+    {sep:true},
+    {label:"航行", sub:nav},
+    {label:"感測器", sub:[
+      {label:"空搜雷達", sub:sensorSub("air")},
+      {label:"平搜雷達", sub:sensorSub("surf")},
+      {label:"主動聲納", sub:sensorSub("sonar")},
+    ]},
+    {label:"武器狀態", sub:[
+      {label:"Free 自由", action:()=>sendCmd({type:"weaponstatus",unit:u,value:"Free"})},
+      {label:"Tight 限制", action:()=>sendCmd({type:"weaponstatus",unit:u,value:"Tight"})},
+      {label:"Hold 暫停", action:()=>sendCmd({type:"weaponstatus",unit:u,value:"Hold"})},
+    ]},
+    {label: d.emcon?"EMCON：解除靜默":"EMCON：靜默", action:()=>sendCmd({type:"emcon",unit:u,on:!d.emcon})},
+  ];
+}
+function startAttack(u){ attacking={unit:u,target:null}; selectContact(u); updatePlanToolbar(); scheduleRender(); }
 
 // ── 攻擊目標 ────────────────────────────────────────────
 function setAttackTarget(id){ if(!attacking) return;
   const c=state.scenario.contacts.find(x=>x.id===id); if(!c||c.own) return;
-  attacking.target=id; updatePlanToolbar(); scheduleRender(); }
-async function confirmAttack(){
-  if(!attacking || attacking.target==null) return;
-  const unit=attacking.unit, target=attacking.target;
-  try{
-    await fetch("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({type:"attack",unit,target})});
-    logLine(`已下攻擊令：單位 ${unit} → 目標 ${target}`);
-  }catch{ logLine("攻擊指令送出失敗（伺服器？）"); }
-  attacking=null; updatePlanToolbar(); scheduleRender();
-}
+  sendCmd({type:"attack",unit:attacking.unit,target:id});   // 即時下令
+  attacking=null; updatePlanToolbar(); scheduleRender(); }
 function cancelAttack(){ attacking=null; updatePlanToolbar(); scheduleRender(); }
-function drawAttack(){
-  if(!attacking || attacking.target==null) return;
-  const u=state.scenario.contacts.find(c=>c.id===attacking.unit);
-  const t=state.scenario.contacts.find(c=>c.id===attacking.target);
-  if(!u||!t) return;
-  const a=project(u.lat,u.lon), b=project(t.lat,t.lon);
-  ctx.save();
-  ctx.strokeStyle="#ff3b30"; ctx.lineWidth=2; ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]);
-  ctx.lineWidth=2;
-  ctx.beginPath(); ctx.arc(b.x,b.y,12,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(b.x-16,b.y); ctx.lineTo(b.x+16,b.y);
-  ctx.moveTo(b.x,b.y-16); ctx.lineTo(b.x,b.y+16); ctx.stroke();
-  ctx.restore();
-}
-function addPlanPoint(latlng){ if(!planning) return;
-  planning.points.push({lat:latlng.lat,lon:latlng.lng}); updatePlanToolbar(); scheduleRender(); }
-async function confirmPlan(){
-  if(!planning || !planning.points.length){ cancelPlan(); return; }
-  const unit=planning.unit, n=planning.points.length;
-  try{
-    await fetch("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({type:"waypoint",unit,points:planning.points,replace:true})});
-    logLine(`已送出航線給單位 ${unit}（${n} 點）`);
-  }catch{ logLine("航線送出失敗（伺服器？）"); }
-  planning=null; updatePlanToolbar(); scheduleRender();
-}
-function cancelPlan(){ planning=null; updatePlanToolbar(); scheduleRender(); }
-function drawPlanning(){
-  if(!planning) return;
-  const u=state.scenario.contacts.find(c=>c.id===planning.unit);
-  ctx.save();
-  ctx.strokeStyle="#ffd24a"; ctx.lineWidth=2; ctx.setLineDash([5,4]);
-  ctx.beginPath(); let started=false;
-  if(u){ const s=project(u.lat,u.lon); ctx.moveTo(s.x,s.y); started=true; }
-  for(const p of planning.points){ const pt=project(p.lat,p.lon);
-    if(!started){ ctx.moveTo(pt.x,pt.y); started=true; } else ctx.lineTo(pt.x,pt.y); }
-  ctx.stroke(); ctx.setLineDash([]);
-  planning.points.forEach((p,i)=>{ const pt=project(p.lat,p.lon);
-    ctx.fillStyle="#ffd24a"; ctx.beginPath(); ctx.arc(pt.x,pt.y,5,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="#000"; ctx.font="9px "+css("--font-mono"); ctx.textAlign="center";
-    ctx.fillText(String(i+1), pt.x, pt.y+3); ctx.textAlign="left"; });
-  ctx.restore();
-}
 
 // ── 即時輪詢 ────────────────────────────────────────────────
 let hadData = false;
@@ -462,7 +456,7 @@ async function pollLive() {
   } else {                                           // 無任務 → 空著
     live = false;
     if (hadData) logLine(d.live ? "任務單位已清空" : "與遊戲連線中斷");
-    state.scenario.contacts = []; selectedId = null; planning = null; attacking = null;
+    state.scenario.contacts = []; selectedId = null; attacking = null; hideContextMenu();
     buildUnitList(); updateReadout(); updatePlanToolbar();
     document.getElementById("mission-name").textContent = "—";
     showWaiting(d.live ? "已連線 · 等待任務單位…" : "等待遊戲連線…（請開啟 Sea Power 並進入任務）");
@@ -492,17 +486,31 @@ async function init() {
     `${fmtLat(e.latlng.lat)}  ${fmtLon(e.latlng.lng)}`; });
   map.on("dblclick", ()=>{ fitToContacts(); });   // 雙擊置中
   map.doubleClickZoom.disable();
-  map.on("click", e=>{
-    if (planning){ addPlanPoint(e.latlng); return; }   // 規劃中 → 點圖加航點
-    if (!state) return;
-    let best=null, bestD=18;
+  const hitContact = px => { let best=null, bestD=18;
     for (const c of state.scenario.contacts){ const p=project(c.lat,c.lon);
-      const d=Math.hypot(p.x-e.containerPoint.x,p.y-e.containerPoint.y); if (d<bestD){bestD=d;best=c;} }
-    if (attacking){ if (best && !best.own) setAttackTarget(best.id); return; } // 攻擊模式 → 選目標
-    if (best){ selectContact(best.id); buildUnitList(); }
+      const d=Math.hypot(p.x-px.x,p.y-px.y); if (d<bestD){bestD=d;best=c;} } return best; };
+  map.on("click", e=>{
+    hideContextMenu();
+    if (!state) return;
+    const best = hitContact(e.containerPoint);
+    if (attacking){ if (best && !best.own) setAttackTarget(best.id); return; } // 攻擊模式 → 點敵方即下令
+    if (best){ selectContact(best.id); buildUnitList(); return; }
+    // 空海：若已選己方單位 → 直接於此加一個航點（比照遊戲即時操作）
+    const sel = state.scenario.contacts.find(c=>c.id===selectedId);
+    if (sel && sel.own) sendCmd({type:"waypoint",unit:sel.id,replace:false,points:[{lat:e.latlng.lat,lon:e.latlng.lng}]});
   });
+  map.on("contextmenu", e=>{
+    if (e.originalEvent) e.originalEvent.preventDefault();
+    hideContextMenu();
+    if (!state) return;
+    const best = hitContact(e.containerPoint);
+    if (best && best.own){ selectContact(best.id); buildUnitList();
+      showContextMenu(e.containerPoint.x, e.containerPoint.y, contactName(best), unitMenu(best)); }
+  });
+  document.addEventListener("click", ev=>{ if (!ev.target.closest("#ctxmenu")) hideContextMenu(); });
+  map.on("movestart zoomstart", hideContextMenu);
   window.addEventListener("keydown", e=>{
-    if (e.key==="Escape"){ if(planning){cancelPlan();return;} if(attacking){cancelAttack();return;} }
+    if (e.key==="Escape"){ hideContextMenu(); if(attacking){cancelAttack();return;} }
     if ((e.key==="f"||e.key==="F") && document.activeElement!==input) fitToContacts();
   });
 

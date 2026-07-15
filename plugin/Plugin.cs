@@ -87,18 +87,17 @@ namespace SpAdvisor
                     if (!el.TryGetProperty("type", out var tp)) continue;
                     var cmd = new PendingCmd { type = tp.GetString() };
                     if (el.TryGetProperty("unit", out var u)) cmd.unit = u.GetInt32();
-                    if (cmd.type == "waypoint")
+                    if (el.TryGetProperty("target", out var t)) cmd.target = t.GetInt32();
+                    if (el.TryGetProperty("salvo", out var s)) cmd.salvo = s.GetInt32();
+                    if (el.TryGetProperty("on", out var o)) cmd.on = o.GetBoolean();
+                    if (el.TryGetProperty("value", out var v)) cmd.value = v.GetString();
+                    if (el.TryGetProperty("num", out var n)) cmd.num = n.GetDouble();
+                    if (el.TryGetProperty("replace", out var r)) cmd.replace = r.GetBoolean();
+                    if (el.TryGetProperty("points", out var pts))
                     {
-                        cmd.replace = el.TryGetProperty("replace", out var r) && r.GetBoolean();
                         cmd.points = new List<double[]>();
-                        if (el.TryGetProperty("points", out var pts))
-                            foreach (var p in pts.EnumerateArray())
-                                cmd.points.Add(new[] { p.GetProperty("lat").GetDouble(), p.GetProperty("lon").GetDouble() });
-                    }
-                    else if (cmd.type == "attack")
-                    {
-                        if (el.TryGetProperty("target", out var t)) cmd.target = t.GetInt32();
-                        if (el.TryGetProperty("salvo", out var s)) cmd.salvo = s.GetInt32();
+                        foreach (var p in pts.EnumerateArray())
+                            cmd.points.Add(new[] { p.GetProperty("lat").GetDouble(), p.GetProperty("lon").GetDouble() });
                     }
                     _cmdQueue.Enqueue(cmd);
                 }
@@ -108,39 +107,46 @@ namespace SpAdvisor
         // 主執行緒：實際下指令給遊戲（每個都驗證單位存在且為玩家可控）
         private void ExecuteCommand(PendingCmd cmd)
         {
-            if (cmd.type == "waypoint")
+            var ob = CoreService.FindByUID(cmd.unit);
+            if (ob == null || !ob.IsPlayerObject) { Logger.LogWarning($"指令 {cmd.type}: 找不到可控單位 {cmd.unit}"); return; }
+            switch (cmd.type)
             {
-                var ob = CoreService.FindByUID(cmd.unit);
-                if (ob == null || !ob.IsPlayerObject) { Logger.LogWarning("waypoint: 找不到可控單位 " + cmd.unit); return; }
-                if (cmd.replace)
-                {
-                    int n = ob.GetNumberOfWaypoints();
-                    if (n > 0) ob.DeleteWaypoints(n);
-                }
-                int added = 0;
-                if (cmd.points != null)
-                    foreach (var p in cmd.points)
+                case "waypoint":
+                    if (cmd.replace) { int n = ob.GetNumberOfWaypoints(); if (n > 0) ob.DeleteWaypoints(n); }
+                    int added = 0;
+                    if (cmd.points != null)
+                        foreach (var p in cmd.points)
+                        { ob.SetWaypointTask(new WaypointData { _geoposition = new GeoPosition { _latitude = p[0], _longitude = p[1] } }); added++; }
+                    Logger.LogInfo($"單位 {cmd.unit} 設定 {added} 航點");
+                    break;
+                case "attack":
                     {
-                        ob.SetWaypointTask(new WaypointData { _geoposition = new GeoPosition { _latitude = p[0], _longitude = p[1] } });
-                        added++;
+                        var target = CoreService.FindByUID(cmd.target);
+                        if (target == null) { Logger.LogWarning("attack: 找不到目標 " + cmd.target); return; }
+                        string ammo = ob.GetDefaultAmmunitionForEngage(target);
+                        if (string.IsNullOrEmpty(ammo) || ob.getAmmunitionAmountByName(ammo) <= 0)
+                        { Logger.LogInfo($"單位 {cmd.unit} 對 {cmd.target} 無可用武器"); return; }
+                        int salvo = cmd.salvo > 0 ? cmd.salvo : 1;
+                        var task = new EngageTask(ammo, target, ob, salvo) { _ignoreIfUndetected = true };
+                        ob.AddEngageTask(task);
+                        Logger.LogInfo($"單位 {cmd.unit} 攻擊 {cmd.target}（{ammo} ×{salvo}）");
                     }
-                Logger.LogInfo($"已為單位 {cmd.unit} 設定 {added} 個航點");
-            }
-            else if (cmd.type == "attack")
-            {
-                var unit = CoreService.FindByUID(cmd.unit);
-                if (unit == null || !unit.IsPlayerObject) { Logger.LogWarning("attack: 找不到可控單位 " + cmd.unit); return; }
-                var target = CoreService.FindByUID(cmd.target);
-                if (target == null) { Logger.LogWarning("attack: 找不到目標 " + cmd.target); return; }
-                // 武器自動選（跟遊戲右鍵攻擊同一套邏輯）
-                string ammo = unit.GetDefaultAmmunitionForEngage(target);
-                if (string.IsNullOrEmpty(ammo) || unit.getAmmunitionAmountByName(ammo) <= 0)
-                { Logger.LogInfo($"單位 {cmd.unit} 對 {cmd.target} 無可用武器"); return; }
-                int salvo = cmd.salvo > 0 ? cmd.salvo : 1;
-                var task = new EngageTask(ammo, target, unit, salvo);
-                task._ignoreIfUndetected = true;   // 只打偵測到的目標（維持公平）
-                unit.AddEngageTask(task);
-                Logger.LogInfo($"單位 {cmd.unit} 攻擊 {cmd.target}（{ammo} ×{salvo}）");
+                    break;
+                case "clearwp": ob.RemoveWaypoints(); Logger.LogInfo($"單位 {cmd.unit} 清除航點"); break;
+                case "resume": ob._playerCommandOverride = false; ob.CheckForPlayerAbort(); Logger.LogInfo($"單位 {cmd.unit} 恢復航向"); break;
+                case "emcon": ob.setEMCON(cmd.on); Logger.LogInfo($"單位 {cmd.unit} EMCON {(cmd.on ? "靜默" : "輻射")}"); break;
+                case "speed": ob.SetSpeedCommand(new ConstantSpeed((float)cmd.num, ob)); Logger.LogInfo($"單位 {cmd.unit} 航速 {cmd.num}kn"); break;
+                case "altitude": ob.DesiredAltitude.Value = (float)(cmd.num * 0.00453571); Logger.LogInfo($"單位 {cmd.unit} 高度 {cmd.num}ft"); break;
+                case "weaponstatus":
+                    if (Enum.TryParse<ObjectBase.WeaponStatus>(cmd.value, out var ws)) { ob.SetWeaponStatus(ws); Logger.LogInfo($"單位 {cmd.unit} 武器 {cmd.value}"); }
+                    break;
+                case "sensor":
+                    bool en = cmd.on;
+                    if (cmd.value == "air") { if (en) ob.EnableAirSearchRadars(); else ob.DisableAirSearchRadars(); }
+                    else if (cmd.value == "surf") { if (en) ob.EnableSurfaceSearchRadars(); else ob.DisableSurfaceSearchRadars(); }
+                    else if (cmd.value == "sonar") { if (en) ob.EnableActiveSonars(); else ob.DisableActiveSonars(); }
+                    Logger.LogInfo($"單位 {cmd.unit} 感測 {cmd.value} {(en ? "開" : "關")}");
+                    break;
             }
         }
 
@@ -467,5 +473,8 @@ namespace SpAdvisor
         public List<double[]> points;
         public int target;
         public int salvo;
+        public bool on;
+        public string value;
+        public double num;
     }
 }
