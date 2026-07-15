@@ -621,12 +621,18 @@ function applyState(d) {
     if (!changed) for (const id of newIds) if (!oldIds.has(id)){ changed=true; break; }
     if (changed) buildUnitList();
     if (!hadData) logLine(`已連上遊戲即時戰況（接觸 ${cs.length}）`);
-    if (d.scenario.ready===false) {                  // 物件還在就定位 → 先不取景，避免被拉到中央又跳走
-      showWaiting("任務初始化中…（單位就定位中）");
+    // ready 只在「首次取景前」用來等待初始就定位；取景後就不再理它，
+    // 免得任務中每次有新物件（發射的飛彈、起飛的機）短暫經過原點就跳回「初始化中」。
+    if (!fitted) {
+      if (d.scenario.ready===false) {
+        showWaiting("任務初始化中…（單位就定位中）");
+      } else {
+        hideWaiting();
+        fitToContacts(); const own=cs.find(c=>c.own);
+        selectContact(own?own.id:cs[0].id); fitted=true;
+      }
     } else {
       hideWaiting();
-      if (!fitted){ fitToContacts(); const own=cs.find(c=>c.own);
-        selectContact(own?own.id:cs[0].id); fitted=true; }
     }
     updateReadout();
     hadData = true;
