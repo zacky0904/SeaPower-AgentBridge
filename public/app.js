@@ -8,6 +8,7 @@ let selectedId = null;
 let startWall = Date.now();
 let live = false;          // true = 遊戲即時資料（停用本地推算）
 let collapsedGroups = new Set();  // 記住被摺疊的 Fleet 資料夾
+let weaponRingUnit = null;        // 只有開啟武器交戰選單時，才畫這個單位的射程環
 let map = null;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -193,7 +194,8 @@ function render() {
   if (!state || !map) return;
   // 只有選中的己方單位才顯示：各武器射程環 + 航線（避免一多就亂）
   const sel = state.scenario.contacts.find(c=>c.id===selectedId);
-  if (sel && sel.own) { drawWeaponRings(sel); drawWaypoints(sel); }
+  if (sel && sel.own) drawWaypoints(sel);
+  if (weaponRingUnit) drawWeaponRings(weaponRingUnit);   // 只在武器選單開啟時顯示射程環
   for (const c of state.scenario.contacts) drawSymbol(c);
   drawLabels();
 }
@@ -294,6 +296,11 @@ function updateReadout() {
   h+=roRow("航向/速", k);
   if (own && !c.own) h+=roRow("距/方位", `${nm(own,c).toFixed(1)} nm · ${Math.round(bearing(own,c))}°`);
   if (c.det && c.det.length) h+=roRow("偵測", c.det.map(detName).join(" · "));
+  if (c.by && c.by.length){                               // 被哪個己方單位、用什麼感測器發現
+    const byUnit=new Map();
+    for(const b of c.by){ if(!byUnit.has(b.u)) byUnit.set(b.u,new Set()); byUnit.get(b.u).add(detName(b.s)); }
+    h+=roRow("偵測來源", [...byUnit.entries()].map(([u,s])=>`${u}（${[...s].join("/")}）`).join(" · "));
+  }
 
   if (c.own && c.detail) {
     const d=c.detail;
@@ -390,7 +397,8 @@ function showContextMenu(x,y,title,items){
   if(py+r.height>w.height) py=Math.max(4,w.height-r.height-4);
   m.style.left=px+"px"; m.style.top=py+"px";
 }
-function hideContextMenu(){ document.getElementById("ctxmenu").className="hidden"; }
+function hideContextMenu(){ document.getElementById("ctxmenu").className="hidden";
+  if (weaponRingUnit){ weaponRingUnit=null; scheduleRender(); } }
 
 // 己方單位的右鍵選單（比照遊戲）
 function unitMenu(c){
@@ -526,6 +534,7 @@ async function init() {
     const sel = state.scenario.contacts.find(c=>c.id===selectedId);
     if (!sel || !sel.own){ logLine("先左鍵選一個己方單位，再右鍵下令"); return; }
     if (best && !best.own){                                                 // 敵方 → 選武器交戰（EngageWith）
+      weaponRingUnit = sel; scheduleRender();                                // 顯示開火單位的射程環
       showContextMenu(e.containerPoint.x, e.containerPoint.y, `交戰 ${contactName(best)}`, weaponsFor(sel, best));
       return; }
     orderMove(sel.id, e.latlng, e.originalEvent && e.originalEvent.shiftKey); // 空海 → 移動 / Shift 加航點

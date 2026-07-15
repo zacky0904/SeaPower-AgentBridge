@@ -183,6 +183,32 @@ namespace SpAdvisor
             int count = 0;
             double sumLat = 0, sumLon = 0; int own = 0;
 
+            // 反查：哪些己方單位的哪種感測器，正偵測到哪個目標（明面：來自你自己的感測器持有清單）
+            var detMap = new Dictionary<int, List<string[]>>();
+            try {
+                foreach (var pv in player.PlottingTable.Vehicles) {
+                    var pob = pv != null ? pv.BaseObject : null;
+                    if (pob == null || !pob.IsPlayerObject || pob.IsDestroyed) continue;
+                    var pobp = pob._obp;
+                    if (pobp == null || pobp._sensorSystems == null) continue;
+                    string uname = !string.IsNullOrEmpty(pob.DisplayNameFull) ? pob.DisplayNameFull
+                                 : (!string.IsNullOrEmpty(pob.TypeAbbreviation) ? pob.TypeAbbreviation : ("#" + pob.UniqueID));
+                    foreach (var ss in pobp._sensorSystems) {
+                        if (ss == null || ss._detectedObjects == null) continue;
+                        string method = SensorMethod(ss);
+                        if (method == null) continue;
+                        foreach (var d in ss._detectedObjects) {
+                            if (d == null) continue;
+                            int tuid = d.UniqueID;
+                            if (!detMap.TryGetValue(tuid, out var lst)) { lst = new List<string[]>(); detMap[tuid] = lst; }
+                            bool dup = false;
+                            foreach (var e in lst) if (e[0] == uname && e[1] == method) { dup = true; break; }
+                            if (!dup && lst.Count < 12) lst.Add(new[] { uname, method });
+                        }
+                    }
+                }
+            } catch {}
+
             foreach (var v in player.PlottingTable.Vehicles)
             {
                 if (v == null || v.BaseObject == null) continue;
@@ -254,6 +280,17 @@ namespace SpAdvisor
                 if (!double.IsNaN(alt) && (domain == "air" || domain == "missile"))
                     contacts.Append(",\"altitude\":").Append(Num(alt));
                 try { contacts.Append(",\"det\":").Append(DetJson(v.DetectingSensors)); } catch {}
+                // 偵測來源（哪個己方單位 + 用哪種感測器）— 只對非己方接觸標記
+                try {
+                    if (!isOwn && detMap.TryGetValue(ob.UniqueID, out var bl) && bl.Count > 0) {
+                        contacts.Append(",\"by\":[");
+                        for (int bi = 0; bi < bl.Count; bi++) {
+                            if (bi > 0) contacts.Append(',');
+                            contacts.Append("{\"u\":").Append(JStr(bl[bi][0])).Append(",\"s\":").Append(JStr(bl[bi][1])).Append('}');
+                        }
+                        contacts.Append(']');
+                    }
+                } catch {}
                 if (isOwn && !destroyed) AppendOwnDetail(contacts, ob);
                 contacts.Append('}');
                 count++;
@@ -407,6 +444,16 @@ namespace SpAdvisor
         }
 
         // 接觸被哪些感測器偵測 → 收斂成高階類別 JSON 陣列（目視/雷達/聲納/電磁/磁探）
+        // 依感測器實體類別歸類偵測方式
+        private static string SensorMethod(SensorSystem ss)
+        {
+            if (ss is SensorSystemRadar) return "radar";
+            if (ss is SensorSystemSonar) return "sonar";
+            if (ss is SensorSystemESM) return "esm";
+            if (ss is SensorSystemVisual) return "visual";
+            return null;
+        }
+
         private static string DetJson(SensorSystem.SensorTypeSet ds)
         {
             var cats = new System.Collections.Generic.List<string>();
