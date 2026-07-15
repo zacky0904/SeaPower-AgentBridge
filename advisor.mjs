@@ -175,6 +175,8 @@ export function buildContext(sc) {
   if (sc.name) L.push(`任務：${sc.name}（${msName[sc.missionStatus] || sc.missionStatus || "—"}）`);
   if (sc.env) L.push(`環境：${[sc.env.datetime, dayName[sc.env.daytime] || sc.env.daytime, sc.env.seaState != null ? "海況" + sc.env.seaState : "", sc.env.clouds].filter(Boolean).join(" ")}`);
   if (sc.objectives?.length) { L.push("任務目標："); for (const o of sc.objectives) L.push(`  - [${({ done: "完成", failed: "失敗", canceled: "取消" })[o.status] || "進行中"}]${o.main ? "（主）" : ""} ${o.text}`); }
+  if (sc.briefing) L.push(`\n任務簡報（初始條件／指揮官意圖）：\n${sc.briefing.replace(/\\n/g, "\n").trim()}`);
+  if (sc.forecast) L.push(`天氣預報：${sc.forecast}`);
 
   L.push(`\n己方（${own.length}）：`);
   for (const u of own) {
