@@ -133,14 +133,9 @@ function drawSymbol(c) {
   ctx.lineWidth = c.own ? 2.2 : 1.8; ctx.strokeStyle=col; ctx.fillStyle=col;
   ctx.lineJoin="round"; ctx.lineCap="round";
   drawFrame(p.x,p.y,r,fam,part);
-  if (glyph){ ctx.font=`bold ${r+1}px `+css("--font-mono"); ctx.textAlign="center"; ctx.textBaseline="middle";
+  if (glyph){ ctx.font=`bold ${r+5}px `+css("--font-mono"); ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.fillText(glyph,p.x,p.y); }
   else ctx.fillRect(p.x-1.5,p.y-1.5,3,3);                       // 中心點
-  // ownship：選中的己方單位加十字準星（比照遊戲 ownship 圖示）
-  if (c.own && c.id===selectedId && !c.destroyed){
-    ctx.beginPath(); ctx.moveTo(p.x-r-3,p.y); ctx.lineTo(p.x+r+3,p.y);
-    ctx.moveTo(p.x,p.y-r-3); ctx.lineTo(p.x,p.y+r+3); ctx.stroke();
-  }
   if (c.destroyed){ ctx.beginPath(); ctx.moveTo(p.x-r,p.y-r); ctx.lineTo(p.x+r,p.y+r);
     ctx.moveTo(p.x+r,p.y-r); ctx.lineTo(p.x-r,p.y+r); ctx.stroke(); }
   if (c.speed>0 && !c.destroyed) {
