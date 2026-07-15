@@ -87,27 +87,62 @@ function drawRangeRings() {
   ctx.setLineDash([]);
 }
 
-// NTDS 風格符號：顏色=關係，形狀=領域
+// NTDS 符號（比照遊戲 minimap 圖示）：關係=形狀家族、領域=取哪一半、色=關係
+//   友軍/盟軍→圓弧　敵軍→菱/折線　中立→十字　未知→方框
+//   水面=全形 · 空中=上半 · 水下=下半 · 飛彈=上半+M · 魚雷=下半+T
+function symFamily(rel){
+  if (rel==="friendly"||rel==="allied") return "round";
+  if (rel==="hostile") return "angular";
+  if (rel==="neutral") return "cross";
+  return "square";                       // unknown / 其他
+}
+function plusPath(x,y,r,a){
+  ctx.moveTo(x-a,y-r); ctx.lineTo(x+a,y-r); ctx.lineTo(x+a,y-a); ctx.lineTo(x+r,y-a);
+  ctx.lineTo(x+r,y+a); ctx.lineTo(x+a,y+a); ctx.lineTo(x+a,y+r); ctx.lineTo(x-a,y+r);
+  ctx.lineTo(x-a,y+a); ctx.lineTo(x-r,y+a); ctx.lineTo(x-r,y-a); ctx.lineTo(x-a,y-a); ctx.closePath();
+}
+function drawFrame(x,y,r,fam,part){
+  ctx.beginPath();
+  if (fam==="round"){
+    if (part==="top") ctx.arc(x,y,r,Math.PI,Math.PI*2);         // 上半圓（穹頂）
+    else if (part==="bottom") ctx.arc(x,y,r,0,Math.PI);          // 下半圓（U）
+    else ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.stroke();
+  } else if (fam==="angular"){
+    if (part==="top"){ ctx.moveTo(x-r,y);ctx.lineTo(x,y-r);ctx.lineTo(x+r,y); }        // ^ 上折
+    else if (part==="bottom"){ ctx.moveTo(x-r,y);ctx.lineTo(x,y+r);ctx.lineTo(x+r,y); } // v 下折
+    else { ctx.moveTo(x,y-r);ctx.lineTo(x+r,y);ctx.lineTo(x,y+r);ctx.lineTo(x-r,y);ctx.closePath(); } // ◇
+    ctx.stroke();
+  } else if (fam==="square"){
+    if (part==="top"){ ctx.moveTo(x-r,y);ctx.lineTo(x-r,y-r);ctx.lineTo(x+r,y-r);ctx.lineTo(x+r,y); } // ⊓
+    else if (part==="bottom"){ ctx.moveTo(x-r,y);ctx.lineTo(x-r,y+r);ctx.lineTo(x+r,y+r);ctx.lineTo(x+r,y); } // U
+    else ctx.rect(x-r,y-r,2*r,2*r);
+    ctx.stroke();
+  } else {                                   // cross 十字（中立）— 少見的空/水下沿用全形
+    plusPath(x,y,r,r*0.42); ctx.stroke();
+  }
+}
 function drawSymbol(c) {
   const p=project(c.lat,c.lon), col=c.destroyed?css("--c-destroyed"):relColor(c.relation), r=8;
+  const fam = c.destroyed ? "angular" : symFamily(c.relation);
+  const dom = c.domain;
+  const part = (dom==="air"||dom==="missile") ? "top"
+             : (dom==="subsurface"||dom==="torpedo") ? "bottom" : "full";
+  const glyph = dom==="missile" ? "M" : dom==="torpedo" ? "T" : "";
   ctx.save();
-  ctx.lineWidth = c.own ? 2.4 : 1.8; ctx.strokeStyle=col; ctx.fillStyle=col;
-  ctx.beginPath();
-  switch (c.domain) {
-    case "air": ctx.arc(p.x,p.y,r,Math.PI,0); ctx.stroke(); break;
-    case "subsurface": ctx.arc(p.x,p.y,r,0,Math.PI); ctx.stroke(); break;
-    case "missile":
-      ctx.moveTo(p.x,p.y-r); ctx.lineTo(p.x+r*0.7,p.y); ctx.lineTo(p.x,p.y+r);
-      ctx.lineTo(p.x-r*0.7,p.y); ctx.closePath(); ctx.fill(); break;
-    case "torpedo":
-      ctx.moveTo(p.x,p.y-r); ctx.lineTo(p.x+r*0.8,p.y+r*0.7); ctx.lineTo(p.x-r*0.8,p.y+r*0.7);
-      ctx.closePath(); ctx.fill(); break;
-    default: ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
+  ctx.lineWidth = c.own ? 2.2 : 1.8; ctx.strokeStyle=col; ctx.fillStyle=col;
+  ctx.lineJoin="round"; ctx.lineCap="round";
+  drawFrame(p.x,p.y,r,fam,part);
+  if (glyph){ ctx.font=`bold ${r+1}px `+css("--font-mono"); ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(glyph,p.x,p.y); }
+  else ctx.fillRect(p.x-1.5,p.y-1.5,3,3);                       // 中心點
+  // ownship：選中的己方單位加十字準星（比照遊戲 ownship 圖示）
+  if (c.own && c.id===selectedId && !c.destroyed){
+    ctx.beginPath(); ctx.moveTo(p.x-r-3,p.y); ctx.lineTo(p.x+r+3,p.y);
+    ctx.moveTo(p.x,p.y-r-3); ctx.lineTo(p.x,p.y+r+3); ctx.stroke();
   }
-  if (c.own) { ctx.beginPath(); ctx.arc(p.x,p.y,r+3,0,Math.PI*2); ctx.stroke(); }
-  if (c.destroyed) { ctx.beginPath(); ctx.moveTo(p.x-r,p.y-r); ctx.lineTo(p.x+r,p.y+r);
+  if (c.destroyed){ ctx.beginPath(); ctx.moveTo(p.x-r,p.y-r); ctx.lineTo(p.x+r,p.y+r);
     ctx.moveTo(p.x+r,p.y-r); ctx.lineTo(p.x-r,p.y+r); ctx.stroke(); }
-
   if (c.speed>0 && !c.destroyed) {
     const len=Math.min(6+c.speed*0.35,55), a=(c.course-90)*Math.PI/180;
     ctx.beginPath(); ctx.moveTo(p.x,p.y);
