@@ -9,6 +9,7 @@ let startWall = Date.now();
 let live = false;          // true = 遊戲即時資料（停用本地推算）
 let collapsedGroups = new Set();  // 記住被摺疊的 Fleet 資料夾
 let weaponRingUnit = null;        // 只有開啟武器交戰選單時，才畫這個單位的射程環
+let seenIds = new Set();          // 上一幀就存在的接觸（導引線只畫「非剛出現」的，避免閃原點）
 let map = null;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -238,7 +239,9 @@ function drawGuidance(){
   const byId=new Map(state.scenario.contacts.map(c=>[c.id,c]));
   ctx.save(); ctx.strokeStyle="rgba(0,200,80,0.85)"; ctx.lineWidth=1.3;
   for (const c of state.scenario.contacts){
+    if (!c.own) continue;                          // 只畫己方武器（敵方鎖定非明面）
     if (c.tgt==null || (c.domain!=="missile" && c.domain!=="torpedo")) continue;
+    if (!seenIds.has(c.id)) continue;              // 剛出現的武器先不畫線（避開原點閃現那一幀）
     const t=byId.get(c.tgt); if(!t) continue;
     const a=project(c.lat,c.lon), b=project(t.lat,t.lon);
     ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
@@ -595,6 +598,7 @@ function applyState(d) {
   if (cs.length) {                                   // 有任務單位 → 顯示
     live = true;
     const oldIds=new Set(state.scenario.contacts.map(c=>c.id));
+    seenIds = oldIds;                                // 這批更新前就存在的接觸
     state.scenario.contacts = cs;
     if (d.scenario.name){ state.scenario.name=d.scenario.name;
       document.getElementById("mission-name").textContent=d.scenario.name; }

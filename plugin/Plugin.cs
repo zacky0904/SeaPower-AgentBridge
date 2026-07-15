@@ -236,8 +236,10 @@ namespace SpAdvisor
                 else if (v.Position != null) { var p = v.Position.Value; lat = p.Latitude; lon = p.Longitude; }
                 else continue;
 
-                // 還在場景中心 = 尚未就定位 → 略過並標記未就緒
-                if (hasCenter && Math.Abs(lat - ccLat) < CENTER_EPS && Math.Abs(lon - ccLon) < CENTER_EPS) { anyAtCenter = true; continue; }
+                // 剛生成的物件會先出現在原點（場景中心）一瞬間 → 略過，避免瞄準線/圖示閃到原點
+                bool atOrigin = (hasCenter && Math.Abs(lat - ccLat) < CENTER_EPS && Math.Abs(lon - ccLon) < CENTER_EPS)
+                                || (Math.Abs(lat) < CENTER_EPS && Math.Abs(lon) < CENTER_EPS);
+                if (atOrigin) { anyAtCenter = true; continue; }
 
                 string relation = MapRelation(v.CurrentRelationship());
                 string domain = MapDomain(mapType);
@@ -308,8 +310,8 @@ namespace SpAdvisor
                         contacts.Append(']');
                     }
                 } catch {}
-                // 導引武器（飛彈/追蹤魚雷）目前導引的目標 → Web 畫綠色導引線
-                if (domain == "missile" || domain == "torpedo") {
+                // 導引目標線：只給「己方」武器（敵方武器鎖定誰是內部模擬資料，非明面，不可讀）
+                if (isOwn && (domain == "missile" || domain == "torpedo")) {
                     try { if (ob is WeaponBase wb) { var tg = wb.CurrentTarget; if (tg != null) contacts.Append(",\"tgt\":").Append(tg.UniqueID); } } catch {}
                 }
                 if (isOwn && !destroyed) AppendOwnDetail(contacts, ob);
